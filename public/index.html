@@ -1,114 +1,194 @@
 <!DOCTYPE html>
-<html>
+<html lang="da">
 <head>
-<meta charset="utf-8">
-<title>Shooter</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multiplayer Shooter</title>
+
 <style>
-body{margin:0;overflow:hidden}
-canvas{display:block}
-#ui{position:absolute;top:10px;left:10px}
+body {
+    margin: 0;
+    overflow: hidden;
+    background: #111;
+    font-family: Arial;
+}
+
+canvas {
+    display: block;
+}
+
+#ui {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 10;
+}
+
+input {
+    padding: 6px;
+}
+button {
+    padding: 6px;
+}
 </style>
 </head>
+
 <body>
 
 <div id="ui">
-<input id="name" placeholder="navn">
-<button onclick="setName()">ok</button>
+    <input id="nameInput" placeholder="Navn">
+    <button onclick="setName()">OK</button>
 </div>
 
-<canvas id="c"></canvas>
+<canvas id="game"></canvas>
 
 <script src="/socket.io/socket.io.js"></script>
+
 <script>
 const socket = io();
-const c = document.getElementById("c");
-const ctx = c.getContext("2d");
 
-let id;
-let state = {players:{},bullets:[]};
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-let me = {x:100,y:100};
+let myId = null;
+
+let state = {
+    players: {},
+    bullets: []
+};
+
+let me = {
+    x: 200,
+    y: 200
+};
+
 let keys = {};
-let last = 0;
+let lastSend = 0;
 
-function resize(){
-  c.width = innerWidth;
-  c.height = innerHeight;
+// ─────────────────────────────
+// SETUP
+// ─────────────────────────────
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }
 resize();
-onresize = resize;
+window.addEventListener("resize", resize);
 
-socket.on("id", i => id = i);
-socket.on("state", s => state = s);
-socket.on("full", () => document.body.innerHTML = "FULL SERVER");
-
-function setName(){
-  socket.emit("name", document.getElementById("name").value);
-}
-
-addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
-
-// movement (smooth + throttled)
-function update(){
-  let moved = false;
-
-  if(keys["w"]){me.y-=4;moved=true}
-  if(keys["s"]){me.y+=4;moved=true}
-  if(keys["a"]){me.x-=4;moved=true}
-  if(keys["d"]){me.x+=4;moved=true}
-
-  if(moved && Date.now()-last > 50){
-    socket.emit("move", me);
-    last = Date.now();
-  }
-}
-
-// shoot
-addEventListener("mousedown", e => {
-
-  const angle = Math.atan2(
-    e.clientY - me.y,
-    e.clientX - me.x
-  );
-
-  socket.emit("shoot", {
-    x: me.x + 15,
-    y: me.y + 15,
-    vx: Math.cos(angle) * 7,
-    vy: Math.sin(angle) * 7
-  });
+// ─────────────────────────────
+// SOCKET EVENTS
+// ─────────────────────────────
+socket.on("id", (id) => {
+    myId = id;
 });
 
-// draw
-function draw(){
+socket.on("state", (s) => {
+    state = s;
+});
 
-  ctx.fillStyle = "#222";
-  ctx.fillRect(0,0,c.width,c.height);
+socket.on("full", () => {
+    document.body.innerHTML = "<h1 style='color:white'>Server er fuld</h1>";
+});
 
-  // players
-  for(const i in state.players){
-    const p = state.players[i];
+// ─────────────────────────────
+// NAME
+// ─────────────────────────────
+function setName() {
+    const name = document.getElementById("nameInput").value;
+    socket.emit("name", name);
+}
 
-    ctx.fillStyle = i===id ? "red" : "blue";
-    ctx.fillRect(p.x,p.y,30,30);
+// ─────────────────────────────
+// INPUT
+// ─────────────────────────────
+document.addEventListener("keydown", (e) => {
+    keys[e.key.toLowerCase()] = true;
+});
 
+document.addEventListener("keyup", (e) => {
+    keys[e.key.toLowerCase()] = false;
+});
+
+// ─────────────────────────────
+// SHOOT (mouse direction)
+// ─────────────────────────────
+document.addEventListener("mousedown", (e) => {
+
+    const angle = Math.atan2(
+        e.clientY - me.y,
+        e.clientX - me.x
+    );
+
+    socket.emit("shoot", {
+        x: me.x + 15,
+        y: me.y + 15,
+        vx: Math.cos(angle) * 9,
+        vy: Math.sin(angle) * 9
+    });
+});
+
+// ─────────────────────────────
+// UPDATE MOVEMENT
+// ─────────────────────────────
+function update() {
+
+    let moved = false;
+
+    if (keys["w"]) { me.y -= 5; moved = true; }
+    if (keys["s"]) { me.y += 5; moved = true; }
+    if (keys["a"]) { me.x -= 5; moved = true; }
+    if (keys["d"]) { me.x += 5; moved = true; }
+
+    if (moved && Date.now() - lastSend > 30) {
+        socket.emit("move", me);
+        lastSend = Date.now();
+    }
+}
+
+// ─────────────────────────────
+// DRAW GAME
+// ─────────────────────────────
+function draw() {
+
+    // background
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // players
+    for (const id in state.players) {
+
+        const p = state.players[id];
+
+        ctx.fillStyle = (id === myId) ? "#ff4444" : "#4488ff";
+        ctx.fillRect(p.x, p.y, 30, 30);
+
+        ctx.fillStyle = "white";
+        ctx.font = "12px Arial";
+        ctx.fillText("P", p.x + 10, p.y + 20);
+    }
+
+    // bullets
+    ctx.fillStyle = "yellow";
+    for (const b of state.bullets) {
+        ctx.fillRect(b.x, b.y, 4, 4);
+    }
+
+    // crosshair
     ctx.fillStyle = "white";
-    ctx.fillText(p.name+" "+p.hp, p.x, p.y-5);
-  }
-
-  // bullets
-  ctx.fillStyle = "yellow";
-  for(const b of state.bullets){
-    ctx.fillRect(b.x,b.y,4,4);
-  }
+    ctx.beginPath();
+    ctx.arc(me.x + 15, me.y + 15, 5, 0, Math.PI * 2);
+    ctx.stroke();
 }
 
-function loop(){
-  update();
-  draw();
-  requestAnimationFrame(loop);
+// ─────────────────────────────
+// GAME LOOP
+// ─────────────────────────────
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
 }
+
 loop();
 </script>
 

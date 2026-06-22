@@ -24,7 +24,7 @@ io.on("connection", (socket) => {
         const p = players[socket.id];
         if (!p) return;
 
-        // server authority (kan korrigere)
+        // SERVER AUTHORITATIVE STATE
         p.x = data.x;
         p.y = data.y;
     });
@@ -39,7 +39,7 @@ io.on("connection", (socket) => {
     });
 });
 
-// send state (20 fps)
+// fixed tickrate (VERY COMMON PRACTICE)
 setInterval(() => {
     io.emit("state", players);
 }, 50);

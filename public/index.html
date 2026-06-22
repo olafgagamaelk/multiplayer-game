@@ -2,19 +2,16 @@
 <html lang="da">
 <head>
 <meta charset="UTF-8">
-<title>Simple Multiplayer</title>
+<title>Client Prediction</title>
 
 <style>
 body {
     margin: 0;
     overflow: hidden;
-    background: #2ecc71; /* grøn baggrund */
+    background: #2ecc71;
     font-family: Arial;
 }
-
-canvas {
-    display: block;
-}
+canvas { display: block; }
 
 #ui {
     position: absolute;
@@ -27,8 +24,8 @@ canvas {
 <body>
 
 <div id="ui">
-    <input id="nameInput" placeholder="Dit navn">
-    <button id="btn">Gem</button>
+    <input id="nameInput" placeholder="navn">
+    <button id="btn">save</button>
 </div>
 
 <canvas id="c"></canvas>
@@ -42,11 +39,18 @@ const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
 let myId = null;
-let players = {};
+let serverPlayers = {};
 
-let me = { x: 200, y: 200 };
+let me = {
+    x: 200,
+    y: 200
+};
+
 let keys = {};
 let lastSend = 0;
+
+// smooth correction factor
+const lerp = (a,b,t) => a + (b-a)*t;
 
 // resize
 function resize(){
@@ -58,7 +62,7 @@ addEventListener("resize", resize);
 
 // socket
 socket.on("id", id => myId = id);
-socket.on("state", data => players = data);
+socket.on("state", data => serverPlayers = data);
 
 // name
 document.getElementById("btn").onclick = () => {
@@ -69,7 +73,9 @@ document.getElementById("btn").onclick = () => {
 addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-// movement
+// ─────────────────────────────
+// CLIENT PREDICTION MOVEMENT
+// ─────────────────────────────
 function update(){
 
     let moved = false;
@@ -79,32 +85,49 @@ function update(){
     if(keys["a"]){ me.x -= 5; moved = true; }
     if(keys["d"]){ me.x += 5; moved = true; }
 
+    // send to server (NOT waiting for response)
     if(moved && Date.now() - lastSend > 30){
         socket.emit("move", me);
         lastSend = Date.now();
     }
 }
 
-// draw
+// ─────────────────────────────
+// DRAW (WITH SMOOTH CORRECTION)
+// ─────────────────────────────
 function draw(){
 
-    ctx.fillStyle = "#2ecc71"; // grøn baggrund
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#2ecc71";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    for(const id in players){
+    for(const id in serverPlayers){
 
-        const p = players[id];
+        const p = serverPlayers[id];
 
-        ctx.fillStyle = id === myId ? "red" : "blue";
-        ctx.fillRect(p.x, p.y, 30, 30);
+        // predicted local player
+        if(id === myId){
+
+            // smooth correction toward server position
+            me.x = lerp(me.x, p.x, 0.2);
+            me.y = lerp(me.y, p.y, 0.2);
+
+            ctx.fillStyle = "red";
+            ctx.fillRect(me.x, me.y, 30, 30);
+
+        } else {
+
+            ctx.fillStyle = "blue";
+            ctx.fillRect(p.x, p.y, 30, 30);
+        }
 
         ctx.fillStyle = "white";
-        ctx.font = "14px Arial";
         ctx.fillText(p.name, p.x, p.y - 5);
     }
 }
 
-// loop
+// ─────────────────────────────
+// LOOP
+// ─────────────────────────────
 function loop(){
     update();
     draw();
@@ -113,6 +136,5 @@ function loop(){
 loop();
 
 </script>
-
 </body>
 </html>

@@ -43,7 +43,7 @@ const socket = io();
 const c = document.getElementById("c");
 const ctx = c.getContext("2d");
 
-let myId = null;
+let myId;
 
 let state = {
     players: {},
@@ -66,7 +66,7 @@ addEventListener("resize", resize);
 // socket
 socket.on("id", id => myId = id);
 
-// IMPORTANT FIX (no lag overwrite bugs)
+// state update (OPTIMIZED)
 socket.on("state", s => {
     state.players = s.players;
     state.bullets = s.bullets;
@@ -78,7 +78,7 @@ document.getElementById("btn").onclick = () => {
     socket.emit("name", document.getElementById("nameInput").value);
 };
 
-// movement input
+// input
 addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
@@ -98,7 +98,7 @@ addEventListener("mousedown", e => {
     });
 });
 
-// update movement
+// movement
 function update(){
 
     let moved = false;
@@ -114,16 +114,16 @@ function update(){
     }
 }
 
-// draw rotated wall
-function drawRot(x,y,w,h,r){
+// draw rotated walls
+function drawWall(w){
     ctx.save();
-    ctx.translate(x + w/2, y + h/2);
-    ctx.rotate(r);
-    ctx.fillRect(-w/2, -h/2, w, h);
+    ctx.translate(w.x + w.w/2, w.y + w.h/2);
+    ctx.rotate(w.rot);
+    ctx.fillRect(-w.w/2, -w.h/2, w.w, w.h);
     ctx.restore();
 }
 
-// draw
+// draw loop
 function draw(){
 
     ctx.fillStyle = "#1a1a1a";
@@ -132,13 +132,13 @@ function draw(){
     // walls
     ctx.fillStyle = "#666";
     for(const w of state.walls){
-        drawRot(w.x,w.y,w.w,w.h,w.rot);
+        drawWall(w);
     }
 
     // bullets
     ctx.fillStyle = "yellow";
     for(const b of state.bullets){
-        ctx.fillRect(b.x,b.y,4,4);
+        ctx.fillRect(b.x, b.y, 4, 4);
     }
 
     // players
@@ -147,7 +147,7 @@ function draw(){
         const p = state.players[id];
 
         ctx.fillStyle = id === myId ? "red" : "blue";
-        ctx.fillRect(p.x,p.y,30,30);
+        ctx.fillRect(p.x, p.y, 30, 30);
 
         ctx.fillStyle = "white";
         ctx.fillText(p.name + " HP:" + p.hp, p.x, p.y - 5);
@@ -167,6 +167,7 @@ function loop(){
     requestAnimationFrame(loop);
 }
 loop();
+
 </script>
 
 </body>

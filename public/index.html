@@ -62,6 +62,8 @@ const me = {
 const speed = 4;
 const keys = {};
 
+let lastSent = 0;
+
 function resize(){
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -74,11 +76,15 @@ socket.on("yourId", id=>{
 });
 
 socket.on("players", data=>{
-    players = data;
-
-    if(myId && players[myId]){
-        me.x = players[myId].x;
-        me.y = players[myId].y;
+    // smooth interpolation
+    for(const id in data){
+        if(players[id]){
+            players[id].x += (data[id].x - players[id].x) * 0.3;
+            players[id].y += (data[id].y - players[id].y) * 0.3;
+            players[id].name = data[id].name;
+        } else {
+            players[id] = data[id];
+        }
     }
 });
 
@@ -106,31 +112,19 @@ function update(){
 
     let moved = false;
 
-    if(keys["w"]){
-        me.y -= speed;
-        moved = true;
-    }
+    if(keys["w"]){ me.y -= speed; moved = true; }
+    if(keys["s"]){ me.y += speed; moved = true; }
+    if(keys["a"]){ me.x -= speed; moved = true; }
+    if(keys["d"]){ me.x += speed; moved = true; }
 
-    if(keys["s"]){
-        me.y += speed;
-        moved = true;
-    }
+    const now = Date.now();
 
-    if(keys["a"]){
-        me.x -= speed;
-        moved = true;
-    }
-
-    if(keys["d"]){
-        me.x += speed;
-        moved = true;
-    }
-
-    if(moved){
+    if(moved && now - lastSent > 50){
         socket.emit("move", {
             x: me.x,
             y: me.y
         });
+        lastSent = now;
     }
 }
 
@@ -167,12 +161,7 @@ function draw(){
         ctx.fillStyle =
             id === myId ? "#ff4444" : "#4444ff";
 
-        ctx.fillRect(
-            p.x,
-            p.y,
-            40,
-            40
-        );
+        ctx.fillRect(p.x, p.y, 40, 40);
 
         ctx.fillStyle = "white";
         ctx.font = "16px Arial";

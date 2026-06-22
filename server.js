@@ -9,15 +9,18 @@ const io = new Server(server);
 app.use(express.static("public"));
 
 const players = {};
+const bullets = [];
 
-// players update loop (anti-lag fix)
+const MAX_PLAYERS = 5;
+
+// send state 20x/sek
 setInterval(() => {
-    io.emit("players", players);
+    io.emit("state", { players, bullets });
 }, 50);
 
 io.on("connection", (socket) => {
 
-    if (Object.keys(players).length >= 2) {
+    if (Object.keys(players).length >= MAX_PLAYERS) {
         socket.emit("serverFull");
         socket.disconnect(true);
         return;
@@ -26,16 +29,15 @@ io.on("connection", (socket) => {
     players[socket.id] = {
         x: Math.random() * 700 + 50,
         y: Math.random() * 400 + 50,
-        name: "Spiller"
+        name: "Spiller",
+        hp: 100
     };
 
     socket.emit("yourId", socket.id);
 
     socket.on("setName", (name) => {
         if (!players[socket.id]) return;
-
-        players[socket.id].name =
-            String(name).substring(0, 16) || "Spiller";
+        players[socket.id].name = String(name).substring(0, 16);
     });
 
     socket.on("move", (data) => {
@@ -45,13 +47,58 @@ io.on("connection", (socket) => {
         players[socket.id].y = data.y;
     });
 
+    socket.on("shoot", (data) => {
+        if (!players[socket.id]) return;
+
+        bullets.push({
+            x: data.x,
+            y: data.y,
+            vx: data.vx,
+            vy: data.vy,
+            owner: socket.id
+        });
+    });
+
     socket.on("disconnect", () => {
         delete players[socket.id];
     });
 });
 
-const PORT = process.env.PORT || 3000;
+// bullet + hit system
+setInterval(() => {
 
-server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server kører på port ${PORT}`);
-});
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+
+        b.x += b.vx;
+        b.y += b.vy;
+
+        for (const id in players) {
+            const p = players[id];
+
+            if (id === b.owner) continue;
+
+            if (
+                b.x > p.x &&
+                b.x < p.x + 40 &&
+                b.y > p.y &&
+                b.y < p.y + 40
+            ) {
+                p.hp -= 20;
+                bullets.splice(i, 1);
+
+                if (p.hp <= 0) {
+                    p.hp = 100;
+                    p.x = Math.random() * 700 + 50;
+                    p.y = Math.random() * 400 + 50;
+                }
+
+                break;
+            }
+        }
+    }
+
+}, 30);
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, "0.0.0.0");

@@ -13,33 +13,27 @@ const bullets = [];
 
 const MAX_PLAYERS = 5;
 
-// send state (players + bullets)
+// send state 15x per second (smooth + low lag)
 setInterval(() => {
-    io.emit("players", players);
-    io.emit("bullets", bullets);
-}, 50);
+    io.emit("state", { players, bullets });
+}, 66);
 
 io.on("connection", (socket) => {
 
     if (Object.keys(players).length >= MAX_PLAYERS) {
-        socket.emit("serverFull");
-        socket.disconnect(true);
+        socket.emit("full");
+        socket.disconnect();
         return;
     }
 
     players[socket.id] = {
-        x: Math.random() * 700 + 50,
+        x: Math.random() * 600 + 50,
         y: Math.random() * 400 + 50,
-        name: "Spiller",
-        hp: 100
+        hp: 100,
+        name: "Player"
     };
 
-    socket.emit("yourId", socket.id);
-
-    socket.on("setName", (name) => {
-        if (!players[socket.id]) return;
-        players[socket.id].name = String(name).substring(0, 16);
-    });
+    socket.emit("id", socket.id);
 
     socket.on("move", (data) => {
         if (!players[socket.id]) return;
@@ -47,16 +41,22 @@ io.on("connection", (socket) => {
         players[socket.id].y = data.y;
     });
 
-    socket.on("shoot", (data) => {
+    socket.on("shoot", (b) => {
         if (!players[socket.id]) return;
 
         bullets.push({
-            x: data.x,
-            y: data.y,
-            vx: data.vx,
-            vy: data.vy,
+            x: b.x,
+            y: b.y,
+            vx: b.vx,
+            vy: b.vy,
             owner: socket.id
         });
+    });
+
+    socket.on("name", (name) => {
+        if (players[socket.id]) {
+            players[socket.id].name = name.slice(0, 12);
+        }
     });
 
     socket.on("disconnect", () => {
@@ -64,7 +64,7 @@ io.on("connection", (socket) => {
     });
 });
 
-// bullet + damage system
+// physics + hits
 setInterval(() => {
 
     for (let i = bullets.length - 1; i >= 0; i--) {
@@ -80,19 +80,18 @@ setInterval(() => {
 
             if (
                 b.x > p.x &&
-                b.x < p.x + 40 &&
+                b.x < p.x + 30 &&
                 b.y > p.y &&
-                b.y < p.y + 40
+                b.y < p.y + 30
             ) {
-                p.hp -= 20;
+                p.hp -= 25;
                 bullets.splice(i, 1);
 
                 if (p.hp <= 0) {
                     p.hp = 100;
-                    p.x = Math.random() * 700 + 50;
+                    p.x = Math.random() * 600 + 50;
                     p.y = Math.random() * 400 + 50;
                 }
-
                 break;
             }
         }

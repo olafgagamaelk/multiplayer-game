@@ -1,21 +1,34 @@
 <!DOCTYPE html>
-<html>
+<html lang="da">
 <head>
 <meta charset="UTF-8">
-<title>Shooter</title>
+<title>Simple Multiplayer</title>
 
 <style>
-body { margin:0; overflow:hidden; background:#111; }
-canvas { display:block; }
-#ui { position:absolute; top:10px; left:10px; }
+body {
+    margin: 0;
+    overflow: hidden;
+    background: #2ecc71; /* grøn baggrund */
+    font-family: Arial;
+}
+
+canvas {
+    display: block;
+}
+
+#ui {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+}
 </style>
 </head>
 
 <body>
 
 <div id="ui">
-    <input id="nameInput">
-    <button id="btn">name</button>
+    <input id="nameInput" placeholder="Dit navn">
+    <button id="btn">Gem</button>
 </div>
 
 <canvas id="c"></canvas>
@@ -25,33 +38,27 @@ canvas { display:block; }
 <script>
 const socket = io();
 
-const c = document.getElementById("c");
-const ctx = c.getContext("2d");
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
 
-let myId;
-
+let myId = null;
 let players = {};
-let bullets = [];
-let walls = [];
 
-let me = { x:200, y:200 };
+let me = { x: 200, y: 200 };
 let keys = {};
 let lastSend = 0;
 
 // resize
 function resize(){
-    c.width = innerWidth;
-    c.height = innerHeight;
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
 }
 resize();
 addEventListener("resize", resize);
 
-// SOCKET SPLIT (vigtigt for performance)
+// socket
 socket.on("id", id => myId = id);
-
-socket.on("players", p => players = p);
-socket.on("bullets", b => bullets = b);
-socket.on("walls", w => walls = w);
+socket.on("state", data => players = data);
 
 // name
 document.getElementById("btn").onclick = () => {
@@ -62,23 +69,7 @@ document.getElementById("btn").onclick = () => {
 addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-// shoot
-addEventListener("mousedown", e => {
-
-    const angle = Math.atan2(
-        e.clientY - me.y,
-        e.clientX - me.x
-    );
-
-    socket.emit("shoot", {
-        x: me.x + 15,
-        y: me.y + 15,
-        vx: Math.cos(angle) * 9,
-        vy: Math.sin(angle) * 9
-    });
-});
-
-// movement (THROTTLED HARD)
+// movement
 function update(){
 
     let moved = false;
@@ -88,40 +79,18 @@ function update(){
     if(keys["a"]){ me.x -= 5; moved = true; }
     if(keys["d"]){ me.x += 5; moved = true; }
 
-    if(moved && Date.now() - lastSend > 50){
+    if(moved && Date.now() - lastSend > 30){
         socket.emit("move", me);
         lastSend = Date.now();
     }
 }
 
-// draw wall
-function drawWall(w){
-    ctx.save();
-    ctx.translate(w.x + w.w/2, w.y + w.h/2);
-    ctx.rotate(w.rot);
-    ctx.fillRect(-w.w/2, -w.h/2, w.w, w.h);
-    ctx.restore();
-}
-
 // draw
 function draw(){
 
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fillRect(0,0,c.width,c.height);
+    ctx.fillStyle = "#2ecc71"; // grøn baggrund
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // walls
-    ctx.fillStyle = "#666";
-    for(const w of walls){
-        drawWall(w);
-    }
-
-    // bullets
-    ctx.fillStyle = "yellow";
-    for(const b of bullets){
-        ctx.fillRect(b.x, b.y, 4, 4);
-    }
-
-    // players
     for(const id in players){
 
         const p = players[id];
@@ -130,7 +99,8 @@ function draw(){
         ctx.fillRect(p.x, p.y, 30, 30);
 
         ctx.fillStyle = "white";
-        ctx.fillText(p.name + " HP:" + p.hp, p.x, p.y - 5);
+        ctx.font = "14px Arial";
+        ctx.fillText(p.name, p.x, p.y - 5);
     }
 }
 
@@ -143,5 +113,6 @@ function loop(){
 loop();
 
 </script>
+
 </body>
 </html>

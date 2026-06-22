@@ -11,9 +11,7 @@ app.use(express.static("public"));
 const players = {};
 const bullets = [];
 
-const MAX_PLAYERS = 10;
-
-// 🧱 walls (roterede kasser)
+// walls sendes ONCE (vigtigt for performance)
 const walls = [
     { x: 300, y: 200, w: 180, h: 30, rot: 0.6 },
     { x: 600, y: 350, w: 220, h: 30, rot: -0.4 },
@@ -23,31 +21,36 @@ const walls = [
 
 const lastShot = {};
 
-// ───────────────
-// OPTIMERET SYNC (mindre lag)
-// ───────────────
+// ─────────────────────────
+// SEND ONLY PLAYER STATE (NO BULLETS EVERY FRAME)
+// ─────────────────────────
 setInterval(() => {
-    io.emit("state", {
-        players,
-        bullets: bullets.slice(-80),
-        walls
-    });
-}, 80);
+    io.emit("players", players);
+}, 100); // 10 fps → MEGET mindre lag
 
-// ───────────────
-// BULLET PHYSICS + COLLISION
-// ───────────────
+// bullets separat (lavere freq)
+setInterval(() => {
+    io.emit("bullets", bullets.slice(-50));
+}, 100);
+
+// walls kun én gang
+io.on("connection", (socket) => {
+    socket.emit("walls", walls);
+});
+
+// ─────────────────────────
+// BULLET SIMULATION (lightweight)
+// ─────────────────────────
 setInterval(() => {
 
     for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
 
-        // movement
         b.x += b.vx;
         b.y += b.vy;
 
-        // remove out of bounds
-        if (b.x < -300 || b.x > 4000 || b.y < -300 || b.y > 4000) {
+        // cleanup
+        if (b.x < -300 || b.x > 3000 || b.y < -300 || b.y > 3000) {
             bullets.splice(i, 1);
             continue;
         }
@@ -76,18 +79,12 @@ setInterval(() => {
         }
     }
 
-}, 35);
+}, 40);
 
-// ───────────────
-// SOCKET LOGIC
-// ───────────────
+// ─────────────────────────
+// SOCKETS
+// ─────────────────────────
 io.on("connection", (socket) => {
-
-    if (Object.keys(players).length >= MAX_PLAYERS) {
-        socket.emit("full");
-        socket.disconnect();
-        return;
-    }
 
     players[socket.id] = {
         x: 200,
@@ -98,10 +95,10 @@ io.on("connection", (socket) => {
 
     socket.emit("id", socket.id);
 
-    // name fix
     socket.on("name", (name) => {
-        if (!players[socket.id]) return;
-        players[socket.id].name = String(name).slice(0, 12);
+        if (players[socket.id]) {
+            players[socket.id].name = String(name).slice(0, 12);
+        }
     });
 
     socket.on("move", (data) => {
@@ -112,13 +109,12 @@ io.on("connection", (socket) => {
         p.y = data.y;
     });
 
-    // 🔫 SHOOT (COOLDOWN ANTI AUTOFIRE)
     socket.on("shoot", (data) => {
 
         const now = Date.now();
         if (!lastShot[socket.id]) lastShot[socket.id] = 0;
 
-        if (now - lastShot[socket.id] < 220) return;
+        if (now - lastShot[socket.id] < 200) return;
         lastShot[socket.id] = now;
 
         bullets.push({

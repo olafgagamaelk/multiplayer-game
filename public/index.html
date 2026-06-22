@@ -3,17 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shooter</title>
+<title>Multiplayer Shooter</title>
 
 <style>
-body { margin:0; overflow:hidden; background:#111; font-family:Arial; }
-canvas { display:block; }
+body {
+    margin: 0;
+    overflow: hidden;
+    background: #111;
+    font-family: Arial;
+}
+
+canvas {
+    display: block;
+}
 
 #ui {
-    position:absolute;
-    top:10px;
-    left:10px;
-    z-index:10;
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 10;
 }
 </style>
 </head>
@@ -22,7 +30,7 @@ canvas { display:block; }
 
 <div id="ui">
     <input id="nameInput" placeholder="Navn">
-    <button id="nameBtn">Gem</button>
+    <button id="btn">Gem</button>
 </div>
 
 <canvas id="c"></canvas>
@@ -35,10 +43,15 @@ const socket = io();
 const c = document.getElementById("c");
 const ctx = c.getContext("2d");
 
-let myId;
-let state = { players:{}, bullets:[], walls:[] };
+let myId = null;
 
-let me = { x:200, y:200 };
+let state = {
+    players: {},
+    bullets: [],
+    walls: []
+};
+
+let me = { x: 200, y: 200 };
 let keys = {};
 let lastSend = 0;
 
@@ -52,14 +65,20 @@ addEventListener("resize", resize);
 
 // socket
 socket.on("id", id => myId = id);
-socket.on("state", s => state = s);
 
-// name FIX (du kunne ikke ændre navn før → nu virker det)
-document.getElementById("nameBtn").onclick = () => {
+// IMPORTANT FIX (no lag overwrite bugs)
+socket.on("state", s => {
+    state.players = s.players;
+    state.bullets = s.bullets;
+    state.walls = s.walls;
+});
+
+// name
+document.getElementById("btn").onclick = () => {
     socket.emit("name", document.getElementById("nameInput").value);
 };
 
-// movement
+// movement input
 addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
@@ -98,9 +117,9 @@ function update(){
 // draw rotated wall
 function drawRot(x,y,w,h,r){
     ctx.save();
-    ctx.translate(x+w/2,y+h/2);
+    ctx.translate(x + w/2, y + h/2);
     ctx.rotate(r);
-    ctx.fillRect(-w/2,-h/2,w,h);
+    ctx.fillRect(-w/2, -h/2, w, h);
     ctx.restore();
 }
 
@@ -133,6 +152,12 @@ function draw(){
         ctx.fillStyle = "white";
         ctx.fillText(p.name + " HP:" + p.hp, p.x, p.y - 5);
     }
+
+    // crosshair
+    ctx.strokeStyle = "white";
+    ctx.beginPath();
+    ctx.arc(me.x + 15, me.y + 15, 5, 0, Math.PI * 2);
+    ctx.stroke();
 }
 
 // loop

@@ -16,30 +16,10 @@ body {
 canvas {
     display: block;
 }
-
-#ui {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    z-index: 10;
-}
-
-input {
-    padding: 6px;
-}
-button {
-    padding: 6px;
-}
 </style>
 </head>
 
 <body>
-
-<div id="ui">
-    <input id="nameInput" placeholder="Navn">
-    <button onclick="setName()">OK</button>
-</div>
-
 <canvas id="game"></canvas>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -54,7 +34,8 @@ let myId = null;
 
 let state = {
     players: {},
-    bullets: []
+    bullets: [],
+    walls: []
 };
 
 let me = {
@@ -65,24 +46,18 @@ let me = {
 let keys = {};
 let lastSend = 0;
 
-// ─────────────────────────────
-// SETUP
-// ─────────────────────────────
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+// resize
+function resize(){
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
 }
 resize();
-window.addEventListener("resize", resize);
+addEventListener("resize", resize);
 
-// ─────────────────────────────
-// SOCKET EVENTS
-// ─────────────────────────────
-socket.on("id", (id) => {
-    myId = id;
-});
+// socket
+socket.on("id", id => myId = id);
 
-socket.on("state", (s) => {
+socket.on("state", s => {
     state = s;
 });
 
@@ -90,29 +65,28 @@ socket.on("full", () => {
     document.body.innerHTML = "<h1 style='color:white'>Server er fuld</h1>";
 });
 
-// ─────────────────────────────
-// NAME
-// ─────────────────────────────
-function setName() {
-    const name = document.getElementById("nameInput").value;
-    socket.emit("name", name);
+// movement input
+addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+// movement
+function update(){
+
+    let moved = false;
+
+    if(keys["w"]){ me.y -= 5; moved = true; }
+    if(keys["s"]){ me.y += 5; moved = true; }
+    if(keys["a"]){ me.x -= 5; moved = true; }
+    if(keys["d"]){ me.x += 5; moved = true; }
+
+    if(moved && Date.now() - lastSend > 30){
+        socket.emit("move", me);
+        lastSend = Date.now();
+    }
 }
 
-// ─────────────────────────────
-// INPUT
-// ─────────────────────────────
-document.addEventListener("keydown", (e) => {
-    keys[e.key.toLowerCase()] = true;
-});
-
-document.addEventListener("keyup", (e) => {
-    keys[e.key.toLowerCase()] = false;
-});
-
-// ─────────────────────────────
-// SHOOT (mouse direction)
-// ─────────────────────────────
-document.addEventListener("mousedown", (e) => {
+// shooting
+addEventListener("mousedown", e => {
 
     const angle = Math.atan2(
         e.clientY - me.y,
@@ -127,69 +101,65 @@ document.addEventListener("mousedown", (e) => {
     });
 });
 
-// ─────────────────────────────
-// UPDATE MOVEMENT
-// ─────────────────────────────
-function update() {
+// draw rotated rectangle
+function drawRotRect(x, y, w, h, rot){
 
-    let moved = false;
+    ctx.save();
+    ctx.translate(x + w/2, y + h/2);
+    ctx.rotate(rot);
 
-    if (keys["w"]) { me.y -= 5; moved = true; }
-    if (keys["s"]) { me.y += 5; moved = true; }
-    if (keys["a"]) { me.x -= 5; moved = true; }
-    if (keys["d"]) { me.x += 5; moved = true; }
+    ctx.fillRect(-w/2, -h/2, w, h);
 
-    if (moved && Date.now() - lastSend > 30) {
-        socket.emit("move", me);
-        lastSend = Date.now();
-    }
+    ctx.restore();
 }
 
-// ─────────────────────────────
-// DRAW GAME
-// ─────────────────────────────
-function draw() {
+// draw
+function draw(){
 
     // background
     ctx.fillStyle = "#1a1a1a";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // players
-    for (const id in state.players) {
-
-        const p = state.players[id];
-
-        ctx.fillStyle = (id === myId) ? "#ff4444" : "#4488ff";
-        ctx.fillRect(p.x, p.y, 30, 30);
-
-        ctx.fillStyle = "white";
-        ctx.font = "12px Arial";
-        ctx.fillText("P", p.x + 10, p.y + 20);
+    // walls (rotated rectangles)
+    ctx.fillStyle = "#666";
+    for(const w of state.walls || []){
+        drawRotRect(w.x, w.y, w.w, w.h, w.rot);
     }
 
     // bullets
     ctx.fillStyle = "yellow";
-    for (const b of state.bullets) {
+    for(const b of state.bullets){
         ctx.fillRect(b.x, b.y, 4, 4);
     }
 
+    // players
+    for(const id in state.players){
+
+        const p = state.players[id];
+
+        ctx.fillStyle = id === myId ? "red" : "blue";
+        ctx.fillRect(p.x, p.y, 30, 30);
+
+        ctx.fillStyle = "white";
+        ctx.font = "12px Arial";
+        ctx.fillText(p.hp, p.x, p.y - 5);
+    }
+
     // crosshair
-    ctx.fillStyle = "white";
+    ctx.strokeStyle = "white";
     ctx.beginPath();
     ctx.arc(me.x + 15, me.y + 15, 5, 0, Math.PI * 2);
     ctx.stroke();
 }
 
-// ─────────────────────────────
-// GAME LOOP
-// ─────────────────────────────
-function loop() {
+// loop
+function loop(){
     update();
     draw();
     requestAnimationFrame(loop);
 }
-
 loop();
+
 </script>
 
 </body>

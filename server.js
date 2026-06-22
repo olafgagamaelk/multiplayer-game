@@ -13,9 +13,10 @@ const bullets = [];
 
 const MAX_PLAYERS = 5;
 
-// send state 20x/sek
+// send state (players + bullets)
 setInterval(() => {
-    io.emit("state", { players, bullets });
+    io.emit("players", players);
+    io.emit("bullets", bullets);
 }, 50);
 
 io.on("connection", (socket) => {
@@ -42,7 +43,6 @@ io.on("connection", (socket) => {
 
     socket.on("move", (data) => {
         if (!players[socket.id]) return;
-
         players[socket.id].x = data.x;
         players[socket.id].y = data.y;
     });
@@ -64,7 +64,7 @@ io.on("connection", (socket) => {
     });
 });
 
-// bullet + hit system
+// bullet + damage system
 setInterval(() => {
 
     for (let i = bullets.length - 1; i >= 0; i--) {

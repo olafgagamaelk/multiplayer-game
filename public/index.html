@@ -1,1 +1,199 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2 Player Baseplate</title>
 
+<style>
+body{
+    margin:0;
+    overflow:hidden;
+    font-family:Arial,sans-serif;
+}
+
+#ui{
+    position:absolute;
+    top:10px;
+    left:10px;
+    z-index:10;
+}
+
+#nameInput{
+    padding:8px;
+    font-size:16px;
+}
+
+#saveBtn{
+    padding:8px 12px;
+    font-size:16px;
+}
+
+canvas{
+    display:block;
+}
+</style>
+</head>
+<body>
+
+<div id="ui">
+    <input id="nameInput" maxlength="16" placeholder="Dit navn">
+    <button id="saveBtn">Gem navn</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+const socket = io();
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let myId = null;
+let players = {};
+
+const me = {
+    x: 100,
+    y: 100
+};
+
+const speed = 4;
+const keys = {};
+
+function resize(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener("resize", resize);
+
+socket.on("yourId", id=>{
+    myId = id;
+});
+
+socket.on("players", data=>{
+    players = data;
+
+    if(myId && players[myId]){
+        me.x = players[myId].x;
+        me.y = players[myId].y;
+    }
+});
+
+socket.on("serverFull", ()=>{
+    document.body.innerHTML =
+        "<h1>Serveren er fuld (maks 2 spillere)</h1>";
+});
+
+document.getElementById("saveBtn").onclick = ()=>{
+    const name =
+        document.getElementById("nameInput").value.trim();
+
+    socket.emit("setName", name);
+};
+
+document.addEventListener("keydown", e=>{
+    keys[e.key.toLowerCase()] = true;
+});
+
+document.addEventListener("keyup", e=>{
+    keys[e.key.toLowerCase()] = false;
+});
+
+function update(){
+
+    let moved = false;
+
+    if(keys["w"]){
+        me.y -= speed;
+        moved = true;
+    }
+
+    if(keys["s"]){
+        me.y += speed;
+        moved = true;
+    }
+
+    if(keys["a"]){
+        me.x -= speed;
+        moved = true;
+    }
+
+    if(keys["d"]){
+        me.x += speed;
+        moved = true;
+    }
+
+    if(moved){
+        socket.emit("move", {
+            x: me.x,
+            y: me.y
+        });
+    }
+}
+
+function drawGrid(){
+
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+
+    for(let x=0;x<canvas.width;x+=50){
+        ctx.beginPath();
+        ctx.moveTo(x,0);
+        ctx.lineTo(x,canvas.height);
+        ctx.stroke();
+    }
+
+    for(let y=0;y<canvas.height;y+=50){
+        ctx.beginPath();
+        ctx.moveTo(0,y);
+        ctx.lineTo(canvas.width,y);
+        ctx.stroke();
+    }
+}
+
+function draw(){
+
+    ctx.fillStyle = "#66bb66";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    drawGrid();
+
+    for(const id in players){
+
+        const p = players[id];
+
+        ctx.fillStyle =
+            id === myId ? "#ff4444" : "#4444ff";
+
+        ctx.fillRect(
+            p.x,
+            p.y,
+            40,
+            40
+        );
+
+        ctx.fillStyle = "white";
+        ctx.font = "16px Arial";
+        ctx.textAlign = "center";
+
+        ctx.fillText(
+            p.name,
+            p.x + 20,
+            p.y - 10
+        );
+    }
+}
+
+function gameLoop(){
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+
+</body>
+</html>

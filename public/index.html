@@ -2,7 +2,7 @@
 <html lang="da">
 <head>
 <meta charset="UTF-8">
-<title>Client Prediction</title>
+<title>Multiplayer Standard</title>
 
 <style>
 body {
@@ -25,7 +25,7 @@ canvas { display: block; }
 
 <div id="ui">
     <input id="nameInput" placeholder="navn">
-    <button id="btn">save</button>
+    <button id="btn">gem</button>
 </div>
 
 <canvas id="c"></canvas>
@@ -38,19 +38,16 @@ const socket = io();
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-let myId = null;
+let myId;
 let serverPlayers = {};
 
-let me = {
-    x: 200,
-    y: 200
-};
-
+let me = { x: 200, y: 200 };
 let keys = {};
 let lastSend = 0;
 
-// smooth correction factor
-const lerp = (a,b,t) => a + (b-a)*t;
+function lerp(a,b,t){
+    return a + (b-a)*t;
+}
 
 // resize
 function resize(){
@@ -73,9 +70,7 @@ document.getElementById("btn").onclick = () => {
 addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-// ─────────────────────────────
-// CLIENT PREDICTION MOVEMENT
-// ─────────────────────────────
+// ───────────── CLIENT PREDICTION ─────────────
 function update(){
 
     let moved = false;
@@ -85,16 +80,13 @@ function update(){
     if(keys["a"]){ me.x -= 5; moved = true; }
     if(keys["d"]){ me.x += 5; moved = true; }
 
-    // send to server (NOT waiting for response)
     if(moved && Date.now() - lastSend > 30){
         socket.emit("move", me);
         lastSend = Date.now();
     }
 }
 
-// ─────────────────────────────
-// DRAW (WITH SMOOTH CORRECTION)
-// ─────────────────────────────
+// ───────────── RENDER + INTERPOLATION ─────────────
 function draw(){
 
     ctx.fillStyle = "#2ecc71";
@@ -104,10 +96,9 @@ function draw(){
 
         const p = serverPlayers[id];
 
-        // predicted local player
         if(id === myId){
 
-            // smooth correction toward server position
+            // local player = smooth correction
             me.x = lerp(me.x, p.x, 0.2);
             me.y = lerp(me.y, p.y, 0.2);
 
@@ -116,6 +107,7 @@ function draw(){
 
         } else {
 
+            // other players = direct (simple interpolation base)
             ctx.fillStyle = "blue";
             ctx.fillRect(p.x, p.y, 30, 30);
         }
@@ -125,9 +117,7 @@ function draw(){
     }
 }
 
-// ─────────────────────────────
-// LOOP
-// ─────────────────────────────
+// loop
 function loop(){
     update();
     draw();
@@ -136,5 +126,6 @@ function loop(){
 loop();
 
 </script>
+
 </body>
 </html>

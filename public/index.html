@@ -1,132 +1,114 @@
 <!DOCTYPE html>
-<html lang="da">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Multiplayer Shooter</title>
-
+<meta charset="utf-8">
+<title>Shooter</title>
 <style>
-body{margin:0;overflow:hidden;font-family:Arial}
+body{margin:0;overflow:hidden}
 canvas{display:block}
-#ui{position:absolute;top:10px;left:10px;z-index:10}
+#ui{position:absolute;top:10px;left:10px}
 </style>
 </head>
 <body>
 
 <div id="ui">
-<input id="nameInput" placeholder="Navn">
-<button id="btn">Gem</button>
+<input id="name" placeholder="navn">
+<button onclick="setName()">ok</button>
 </div>
 
 <canvas id="c"></canvas>
-<script src="/socket.io/socket.io.js"></script>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
+const c = document.getElementById("c");
+const ctx = c.getContext("2d");
 
-let myId;
-let players = {};
-let bullets = [];
+let id;
+let state = {players:{},bullets:[]};
 
-const me = {x:100,y:100};
-const keys = {};
-let lastSend = 0;
+let me = {x:100,y:100};
+let keys = {};
+let last = 0;
 
 function resize(){
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
+  c.width = innerWidth;
+  c.height = innerHeight;
 }
 resize();
-addEventListener("resize", resize);
+onresize = resize;
 
-socket.on("yourId", id => myId = id);
+socket.on("id", i => id = i);
+socket.on("state", s => state = s);
+socket.on("full", () => document.body.innerHTML = "FULL SERVER");
 
-socket.on("players", data => {
-    players = data;
-});
+function setName(){
+  socket.emit("name", document.getElementById("name").value);
+}
 
-socket.on("bullets", data => {
-    bullets = data;
-});
-
-socket.on("serverFull", () => {
-    document.body.innerHTML = "<h1>Server fuld (max 5 spillere)</h1>";
-});
-
-// name
-document.getElementById("btn").onclick = () => {
-    socket.emit("setName",
-        document.getElementById("nameInput").value
-    );
-};
-
-// movement
 addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
+// movement (smooth + throttled)
 function update(){
+  let moved = false;
 
-    let moved = false;
+  if(keys["w"]){me.y-=4;moved=true}
+  if(keys["s"]){me.y+=4;moved=true}
+  if(keys["a"]){me.x-=4;moved=true}
+  if(keys["d"]){me.x+=4;moved=true}
 
-    if(keys["w"]){me.y-=4;moved=true}
-    if(keys["s"]){me.y+=4;moved=true}
-    if(keys["a"]){me.x-=4;moved=true}
-    if(keys["d"]){me.x+=4;moved=true}
-
-    if(moved && Date.now()-lastSend>40){
-        socket.emit("move", me);
-        lastSend = Date.now();
-    }
+  if(moved && Date.now()-last > 50){
+    socket.emit("move", me);
+    last = Date.now();
+  }
 }
 
 // shoot
 addEventListener("mousedown", e => {
 
-    const angle = Math.atan2(
-        e.clientY - me.y,
-        e.clientX - me.x
-    );
+  const angle = Math.atan2(
+    e.clientY - me.y,
+    e.clientX - me.x
+  );
 
-    socket.emit("shoot", {
-        x: me.x + 20,
-        y: me.y + 20,
-        vx: Math.cos(angle) * 8,
-        vy: Math.sin(angle) * 8
-    });
+  socket.emit("shoot", {
+    x: me.x + 15,
+    y: me.y + 15,
+    vx: Math.cos(angle) * 7,
+    vy: Math.sin(angle) * 7
+  });
 });
 
 // draw
 function draw(){
 
-    ctx.fillStyle = "#2e8b57";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(0,0,c.width,c.height);
 
-    // players
-    for(const id in players){
-        const p = players[id];
+  // players
+  for(const i in state.players){
+    const p = state.players[i];
 
-        ctx.fillStyle = id===myId ? "red" : "blue";
-        ctx.fillRect(p.x,p.y,40,40);
+    ctx.fillStyle = i===id ? "red" : "blue";
+    ctx.fillRect(p.x,p.y,30,30);
 
-        ctx.fillStyle = "white";
-        ctx.fillText(p.name + " HP:" + p.hp, p.x, p.y-5);
-    }
+    ctx.fillStyle = "white";
+    ctx.fillText(p.name+" "+p.hp, p.x, p.y-5);
+  }
 
-    // bullets
-    ctx.fillStyle = "yellow";
-    for(const b of bullets){
-        ctx.fillRect(b.x,b.y,5,5);
-    }
+  // bullets
+  ctx.fillStyle = "yellow";
+  for(const b of state.bullets){
+    ctx.fillRect(b.x,b.y,4,4);
+  }
 }
 
 function loop(){
-    update();
-    draw();
-    requestAnimationFrame(loop);
+  update();
+  draw();
+  requestAnimationFrame(loop);
 }
-
 loop();
 </script>
 

@@ -3,185 +3,118 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2 Player Baseplate</title>
+<title>Shooter</title>
 
 <style>
-body{
-    margin:0;
-    overflow:hidden;
-    font-family:Arial,sans-serif;
-}
-
-#ui{
-    position:absolute;
-    top:10px;
-    left:10px;
-    z-index:10;
-}
-
-#nameInput{
-    padding:8px;
-    font-size:16px;
-}
-
-#saveBtn{
-    padding:8px 12px;
-    font-size:16px;
-}
-
-canvas{
-    display:block;
-}
+body{margin:0;overflow:hidden;font-family:Arial}
+canvas{display:block}
+#ui{position:absolute;top:10px;left:10px;z-index:10}
 </style>
 </head>
 <body>
 
 <div id="ui">
-    <input id="nameInput" maxlength="16" placeholder="Dit navn">
-    <button id="saveBtn">Gem navn</button>
+<input id="nameInput" placeholder="Navn">
+<button id="btn">Gem</button>
 </div>
 
-<canvas id="game"></canvas>
-
+<canvas id="c"></canvas>
 <script src="/socket.io/socket.io.js"></script>
 
 <script>
 const socket = io();
-
-const canvas = document.getElementById("game");
+const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-let myId = null;
+let myId;
 let players = {};
+let bullets = {};
 
-const me = {
-    x: 100,
-    y: 100
-};
-
-const speed = 4;
+const me = {x:100,y:100};
 const keys = {};
-
-let lastSent = 0;
+let lastSend = 0;
 
 function resize(){
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
 }
 resize();
-window.addEventListener("resize", resize);
+addEventListener("resize", resize);
 
-socket.on("yourId", id=>{
-    myId = id;
+socket.on("yourId", id => myId = id);
+
+socket.on("state", data => {
+  players = data.players;
+  bullets = data.bullets;
 });
 
-socket.on("players", data=>{
-    // smooth interpolation
-    for(const id in data){
-        if(players[id]){
-            players[id].x += (data[id].x - players[id].x) * 0.3;
-            players[id].y += (data[id].y - players[id].y) * 0.3;
-            players[id].name = data[id].name;
-        } else {
-            players[id] = data[id];
-        }
-    }
-});
-
-socket.on("serverFull", ()=>{
-    document.body.innerHTML =
-        "<h1>Serveren er fuld (maks 2 spillere)</h1>";
-});
-
-document.getElementById("saveBtn").onclick = ()=>{
-    const name =
-        document.getElementById("nameInput").value.trim();
-
-    socket.emit("setName", name);
+document.getElementById("btn").onclick = () => {
+  socket.emit("setName", document.getElementById("nameInput").value);
 };
 
-document.addEventListener("keydown", e=>{
-    keys[e.key.toLowerCase()] = true;
-});
+addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-document.addEventListener("keyup", e=>{
-    keys[e.key.toLowerCase()] = false;
-});
-
+// movement
 function update(){
+  let moved = false;
 
-    let moved = false;
+  if(keys["w"]){me.y-=4;moved=true}
+  if(keys["s"]){me.y+=4;moved=true}
+  if(keys["a"]){me.x-=4;moved=true}
+  if(keys["d"]){me.x+=4;moved=true}
 
-    if(keys["w"]){ me.y -= speed; moved = true; }
-    if(keys["s"]){ me.y += speed; moved = true; }
-    if(keys["a"]){ me.x -= speed; moved = true; }
-    if(keys["d"]){ me.x += speed; moved = true; }
-
-    const now = Date.now();
-
-    if(moved && now - lastSent > 50){
-        socket.emit("move", {
-            x: me.x,
-            y: me.y
-        });
-        lastSent = now;
-    }
+  if(moved && Date.now()-lastSend>40){
+    socket.emit("move", me);
+    lastSend = Date.now();
+  }
 }
 
-function drawGrid(){
+// shoot
+addEventListener("mousedown", e => {
 
-    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  const angle = Math.atan2(
+    e.clientY - me.y,
+    e.clientX - me.x
+  );
 
-    for(let x=0;x<canvas.width;x+=50){
-        ctx.beginPath();
-        ctx.moveTo(x,0);
-        ctx.lineTo(x,canvas.height);
-        ctx.stroke();
-    }
+  socket.emit("shoot", {
+    x: me.x+20,
+    y: me.y+20,
+    vx: Math.cos(angle)*8,
+    vy: Math.sin(angle)*8
+  });
+});
 
-    for(let y=0;y<canvas.height;y+=50){
-        ctx.beginPath();
-        ctx.moveTo(0,y);
-        ctx.lineTo(canvas.width,y);
-        ctx.stroke();
-    }
-}
-
+// draw
 function draw(){
 
-    ctx.fillStyle = "#66bb66";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="#2e8b57";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    drawGrid();
+  for(const id in players){
+    const p = players[id];
 
-    for(const id in players){
+    ctx.fillStyle = id===myId?"red":"blue";
+    ctx.fillRect(p.x,p.y,40,40);
 
-        const p = players[id];
+    ctx.fillStyle="white";
+    ctx.fillText(p.name+" HP:"+p.hp, p.x, p.y-5);
+  }
 
-        ctx.fillStyle =
-            id === myId ? "#ff4444" : "#4444ff";
-
-        ctx.fillRect(p.x, p.y, 40, 40);
-
-        ctx.fillStyle = "white";
-        ctx.font = "16px Arial";
-        ctx.textAlign = "center";
-
-        ctx.fillText(
-            p.name,
-            p.x + 20,
-            p.y - 10
-        );
-    }
+  ctx.fillStyle="yellow";
+  for(const b of bullets){
+    ctx.fillRect(b.x,b.y,5,5);
+  }
 }
 
-function gameLoop(){
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
 }
 
-gameLoop();
+loop();
 </script>
 
 </body>

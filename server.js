@@ -21,15 +21,16 @@ io.on("connection", (socket) => {
     socket.emit("id", socket.id);
 
     socket.on("move", (data) => {
-        if (!players[socket.id]) return;
+        const p = players[socket.id];
+        if (!p) return;
 
-        players[socket.id].x = data.x;
-        players[socket.id].y = data.y;
+        // server authority (kan korrigere)
+        p.x = data.x;
+        p.y = data.y;
     });
 
     socket.on("name", (name) => {
         if (!players[socket.id]) return;
-
         players[socket.id].name = String(name).slice(0, 12);
     });
 
@@ -38,7 +39,7 @@ io.on("connection", (socket) => {
     });
 });
 
-// send state 20 fps (let + stabilt)
+// send state (20 fps)
 setInterval(() => {
     io.emit("state", players);
 }, 50);

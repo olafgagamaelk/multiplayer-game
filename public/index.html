@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shooter</title>
+<title>Multiplayer Shooter</title>
 
 <style>
 body{margin:0;overflow:hidden;font-family:Arial}
@@ -28,7 +28,7 @@ const ctx = canvas.getContext("2d");
 
 let myId;
 let players = {};
-let bullets = {};
+let bullets = [];
 
 const me = {x:100,y:100};
 const keys = {};
@@ -43,75 +43,88 @@ addEventListener("resize", resize);
 
 socket.on("yourId", id => myId = id);
 
-socket.on("state", data => {
-  players = data.players;
-  bullets = data.bullets;
+socket.on("players", data => {
+    players = data;
 });
 
+socket.on("bullets", data => {
+    bullets = data;
+});
+
+socket.on("serverFull", () => {
+    document.body.innerHTML = "<h1>Server fuld (max 5 spillere)</h1>";
+});
+
+// name
 document.getElementById("btn").onclick = () => {
-  socket.emit("setName", document.getElementById("nameInput").value);
+    socket.emit("setName",
+        document.getElementById("nameInput").value
+    );
 };
 
+// movement
 addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-// movement
 function update(){
-  let moved = false;
 
-  if(keys["w"]){me.y-=4;moved=true}
-  if(keys["s"]){me.y+=4;moved=true}
-  if(keys["a"]){me.x-=4;moved=true}
-  if(keys["d"]){me.x+=4;moved=true}
+    let moved = false;
 
-  if(moved && Date.now()-lastSend>40){
-    socket.emit("move", me);
-    lastSend = Date.now();
-  }
+    if(keys["w"]){me.y-=4;moved=true}
+    if(keys["s"]){me.y+=4;moved=true}
+    if(keys["a"]){me.x-=4;moved=true}
+    if(keys["d"]){me.x+=4;moved=true}
+
+    if(moved && Date.now()-lastSend>40){
+        socket.emit("move", me);
+        lastSend = Date.now();
+    }
 }
 
 // shoot
 addEventListener("mousedown", e => {
 
-  const angle = Math.atan2(
-    e.clientY - me.y,
-    e.clientX - me.x
-  );
+    const angle = Math.atan2(
+        e.clientY - me.y,
+        e.clientX - me.x
+    );
 
-  socket.emit("shoot", {
-    x: me.x+20,
-    y: me.y+20,
-    vx: Math.cos(angle)*8,
-    vy: Math.sin(angle)*8
-  });
+    socket.emit("shoot", {
+        x: me.x + 20,
+        y: me.y + 20,
+        vx: Math.cos(angle) * 8,
+        vy: Math.sin(angle) * 8
+    });
 });
 
 // draw
 function draw(){
 
-  ctx.fillStyle="#2e8b57";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = "#2e8b57";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  for(const id in players){
-    const p = players[id];
+    // players
+    for(const id in players){
+        const p = players[id];
 
-    ctx.fillStyle = id===myId?"red":"blue";
-    ctx.fillRect(p.x,p.y,40,40);
+        ctx.fillStyle = id===myId ? "red" : "blue";
+        ctx.fillRect(p.x,p.y,40,40);
 
-    ctx.fillStyle="white";
-    ctx.fillText(p.name+" HP:"+p.hp, p.x, p.y-5);
-  }
+        ctx.fillStyle = "white";
+        ctx.fillText(p.name + " HP:" + p.hp, p.x, p.y-5);
+    }
 
-  ctx.fillStyle="yellow";
-  for(const b of bullets){
-    ctx.fillRect(b.x,b.y,5,5);
-  }
+    // bullets
+    ctx.fillStyle = "yellow";
+    for(const b of bullets){
+        ctx.fillRect(b.x,b.y,5,5);
+    }
 }
 
 function loop(){
-  update();
-  draw();
-  requestAnimationFrame(loop);
+    update();
+    draw();
+    requestAnimationFrame(loop);
 }
 
 loop();

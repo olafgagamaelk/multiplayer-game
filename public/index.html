@@ -2,7 +2,7 @@
 <html lang="da">
 <head>
 <meta charset="UTF-8">
-<title>Simple Multiplayer</title>
+<title>Fast Multiplayer</title>
 
 <style>
 body{
@@ -43,36 +43,41 @@ const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
 let myId = null;
+
 let players = {};
 
 let me = {
-    x: 200,
-    y: 200
+    x:200,
+    y:200
 };
 
 let keys = {};
 let lastSend = 0;
 
 function resize(){
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
 }
 
 resize();
-
 window.addEventListener("resize", resize);
 
 socket.on("id", id=>{
     myId = id;
 });
 
+// SERVER MÅ IKKE FLYTTE MIG
 socket.on("state", data=>{
 
     players = data;
 
-    if(myId && players[myId]){
-        me.x = players[myId].x;
-        me.y = players[myId].y;
+    if(myId){
+
+        players[myId] = {
+            ...(players[myId] || {}),
+            x: me.x,
+            y: me.y
+        };
     }
 });
 
@@ -117,11 +122,11 @@ function update(){
         moved = true;
     }
 
-    if(moved && Date.now() - lastSend > 30){
+    if(moved && Date.now() - lastSend > 50){
 
         socket.emit("move",{
-            x: me.x,
-            y: me.y
+            x:me.x,
+            y:me.y
         });
 
         lastSend = Date.now();
@@ -130,7 +135,7 @@ function update(){
 
 function draw(){
 
-    ctx.fillStyle = "#2ecc71";
+    ctx.fillStyle="#2ecc71";
     ctx.fillRect(
         0,
         0,
@@ -154,11 +159,10 @@ function draw(){
             30
         );
 
-        ctx.fillStyle = "white";
-        ctx.font = "14px Arial";
+        ctx.fillStyle="white";
 
         ctx.fillText(
-            p.name,
+            p.name || "Player",
             p.x,
             p.y - 5
         );

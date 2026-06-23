@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Multiplayer OBB</title>
+<title>Multiplayer OBB Fix</title>
 
 <style>
 body{
@@ -27,8 +27,8 @@ canvas{display:block;}
 <body>
 
 <div id="ui">
-    <input id="nameInput" maxlength="12" placeholder="Navn">
-    <button id="saveBtn">Gem</button>
+    <input id="nameInput" maxlength="12" placeholder="navn">
+    <button id="saveBtn">gem</button>
 </div>
 
 <canvas id="game"></canvas>
@@ -41,7 +41,7 @@ const socket = io();
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-let myId;
+let myId = null;
 let players = {};
 let renderPlayers = {};
 
@@ -49,115 +49,51 @@ const MAP_W = 1400;
 const MAP_H = 900;
 
 const SIZE = 30;
-const SPEED = 2.8;
-
-const me = { x:700, y:450 };
-const keys = {};
+const SPEED = 2.6;
 
 let camX = 0;
 let camY = 0;
 
+const keys = {};
 let lastSend = 0;
 
-function lerp(a,b,t){
-    return a + (b-a)*t;
-}
-
-/* ---------------- W E L L S (ROTEREDE) ---------------- */
+/* ---------------- WALLS ---------------- */
 
 const walls = [
-    {x:200,y:200,w:250,h:40,a:20},
-    {x:500,y:150,w:200,h:40,a:-25},
-    {x:900,y:200,w:250,h:40,a:35},
+    {x:200,y:120,w:300,h:40,a:25},
+    {x:600,y:100,w:250,h:40,a:-20},
+    {x:950,y:180,w:200,h:40,a:15},
 
-    {x:300,y:400,w:40,h:250,a:10},
-    {x:600,y:350,w:300,h:40,a:-15},
+    {x:300,y:300,w:40,h:250,a:35},
+    {x:500,y:260,w:350,h:40,a:-10},
+    {x:900,y:300,w:40,h:300,a:20},
 
-    {x:950,y:400,w:40,h:250,a:25},
-    {x:1100,y:600,w:220,h:40,a:-30},
-
-    {x:250,y:650,w:300,h:40,a:15},
-    {x:700,y:600,w:40,h:250,a:-20},
-    {x:900,y:700,w:300,h:40,a:10}
+    {x:200,y:650,w:300,h:40,a:30},
+    {x:650,y:500,w:40,h:250,a:-25},
+    {x:900,y:650,w:250,h:40,a:10}
 ];
 
-/* ---------------- ROTATION HELPERS ---------------- */
+/* ---------------- PLAYER ---------------- */
 
-function toLocal(px, py, cx, cy, angle){
-    const rad = -angle * Math.PI / 180;
-    const s = Math.sin(rad);
-    const c = Math.cos(rad);
-
-    px -= cx;
-    py -= cy;
-
-    return {
-        x: px * c - py * s,
-        y: px * s + py * c
-    };
-}
-
-/* ---------------- COLLISION OBB ---------------- */
-
-function collideOBB(px,py,wall){
-
-    const centerX = wall.x + wall.w/2;
-    const centerY = wall.y + wall.h/2;
-
-    const p = toLocal(px,py,centerX,centerY,wall.a);
-
-    return (
-        p.x > -wall.w/2 &&
-        p.x < wall.w/2 &&
-        p.y > -wall.h/2 &&
-        p.y < wall.h/2
-    );
-}
-
-/* ---------------- MOVEMENT ---------------- */
-
-function move(dx,dy){
-
-    let oldX = me.x;
-    let oldY = me.y;
-
-    me.x += dx;
-
-    for(const w of walls){
-        if(collideOBB(me.x,me.y,w)){
-            me.x = oldX;
-            break;
-        }
-    }
-
-    me.y += dy;
-
-    for(const w of walls){
-        if(collideOBB(me.x,me.y,w)){
-            me.y = oldY;
-            break;
-        }
-    }
-}
+const me = { x:700, y:450 };
 
 /* ---------------- SOCKET ---------------- */
 
 socket.on("id", id => myId = id);
 
 socket.on("state", data => {
-
     players = data;
 
     for(const id in players){
         if(!renderPlayers[id]){
             renderPlayers[id] = {
-                x: players[id].x,
-                y: players[id].y
+                x:players[id].x,
+                y:players[id].y
             };
         }
     }
 
-    if(myId){
+    if(myId && players[myId]){
         players[myId].x = me.x;
         players[myId].y = me.y;
     }
@@ -172,11 +108,76 @@ document.addEventListener("keyup", e=>{
     keys[e.key.toLowerCase()] = false;
 });
 
-/* ---------------- CAMERA ---------------- */
+/* ---------------- NAME ---------------- */
 
-function updateCam(){
-    camX = lerp(camX, me.x - innerWidth/2, 0.1);
-    camY = lerp(camY, me.y - innerHeight/2, 0.1);
+document.getElementById("saveBtn").onclick = ()=>{
+    socket.emit("name",
+        document.getElementById("nameInput").value
+    );
+};
+
+/* ---------------- MATH ---------------- */
+
+function lerp(a,b,t){
+    return a + (b-a)*t;
+}
+
+/* ---------------- OBB COLLISION ---------------- */
+
+function rotate(px,py,cx,cy,ang){
+    const s = Math.sin(ang);
+    const c = Math.cos(ang);
+
+    px -= cx;
+    py -= cy;
+
+    return {
+        x: px * c + py * s,
+        y: -px * s + py * c
+    };
+}
+
+function checkOBB(px,py,wall){
+
+    const ang = wall.a * Math.PI/180;
+
+    const cx = wall.x + wall.w/2;
+    const cy = wall.y + wall.h/2;
+
+    const p = rotate(px,py,cx,cy,ang);
+
+    return (
+        p.x > wall.x &&
+        p.x < wall.x + wall.w &&
+        p.y > wall.y &&
+        p.y < wall.y + wall.h
+    );
+}
+
+/* ---------------- MOVE ---------------- */
+
+function move(dx,dy){
+
+    const oldX = me.x;
+    const oldY = me.y;
+
+    me.x += dx;
+
+    for(const w of walls){
+        if(checkOBB(me.x,me.y,w)){
+            me.x = oldX;
+            break;
+        }
+    }
+
+    me.y += dy;
+
+    for(const w of walls){
+        if(checkOBB(me.x,me.y,w)){
+            me.y = oldY;
+            break;
+        }
+    }
 }
 
 /* ---------------- UPDATE ---------------- */
@@ -195,35 +196,77 @@ function update(){
         lastSend = Date.now();
     }
 
-    updateCam();
+    const targetX = me.x - canvas.width/2 + SIZE/2;
+    const targetY = me.y - canvas.height/2 + SIZE/2;
+
+    camX = lerp(camX,targetX,0.08);
+    camY = lerp(camY,targetY,0.08);
 }
 
 /* ---------------- DRAW ---------------- */
+
+function drawGrass(){
+
+    ctx.fillStyle = "#57c76d";
+    ctx.fillRect(-camX,-camY,MAP_W,MAP_H);
+
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+
+    for(let x=0;x<MAP_W;x+=25){
+        for(let y=0;y<MAP_H;y+=25){
+            ctx.beginPath();
+            ctx.moveTo(x-camX,y-camY+4);
+            ctx.lineTo(x-camX+2,y-camY-4);
+            ctx.stroke();
+        }
+    }
+}
+
+function drawWall(w){
+
+    const ang = w.a * Math.PI/180;
+
+    ctx.save();
+
+    ctx.translate(
+        w.x + w.w/2 - camX,
+        w.y + w.h/2 - camY
+    );
+
+    ctx.rotate(ang);
+
+    ctx.fillStyle="#7a7a7a";
+    ctx.fillRect(-w.w/2,-w.h/2,w.w,w.h);
+
+    ctx.fillStyle="#9c9c9c";
+    ctx.fillRect(-w.w/2,-w.h/2,w.w,6);
+
+    ctx.restore();
+}
+
+/* ---------------- LOOP ---------------- */
 
 function draw(){
 
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // grass
-    ctx.fillStyle = "#57c76d";
-    ctx.fillRect(-camX,-camY,MAP_W,MAP_H);
+    drawGrass();
 
-    // walls
     for(const w of walls){
         drawWall(w);
     }
 
-    // me
     ctx.fillStyle="red";
     ctx.fillRect(me.x-camX,me.y-camY,SIZE,SIZE);
 
-    // others
     for(const id in players){
 
         if(id === myId) continue;
 
         const p = players[id];
         const rp = renderPlayers[id];
+
+        if(!rp) continue;
 
         rp.x = lerp(rp.x,p.x,0.2);
         rp.y = lerp(rp.y,p.y,0.2);
@@ -233,32 +276,12 @@ function draw(){
     }
 }
 
-/* ---------------- WALL DRAW (ROTATED) ---------------- */
-
-function drawWall(w){
-
-    ctx.save();
-
-    ctx.translate(
-        w.x + w.w/2 - camX,
-        w.y + w.h/2 - camY
-    );
-
-    ctx.rotate(w.a * Math.PI / 180);
-
-    ctx.fillStyle="#777";
-    ctx.fillRect(-w.w/2,-w.h/2,w.w,w.h);
-
-    ctx.restore();
-}
-
-/* ---------------- LOOP ---------------- */
-
 function loop(){
     update();
     draw();
     requestAnimationFrame(loop);
 }
+
 loop();
 
 </script>

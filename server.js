@@ -21,17 +21,17 @@ io.on("connection", (socket) => {
     socket.emit("id", socket.id);
 
     socket.on("move", (data) => {
-        const p = players[socket.id];
-        if (!p) return;
+        if (!players[socket.id]) return;
 
-        // SERVER AUTHORITATIVE STATE
-        p.x = data.x;
-        p.y = data.y;
+        players[socket.id].x = data.x;
+        players[socket.id].y = data.y;
     });
 
     socket.on("name", (name) => {
         if (!players[socket.id]) return;
-        players[socket.id].name = String(name).slice(0, 12);
+
+        players[socket.id].name =
+            String(name).slice(0, 12);
     });
 
     socket.on("disconnect", () => {
@@ -39,7 +39,6 @@ io.on("connection", (socket) => {
     });
 });
 
-// fixed tickrate (VERY COMMON PRACTICE)
 setInterval(() => {
     io.emit("state", players);
 }, 50);

@@ -21,6 +21,7 @@ io.on("connection", (socket) => {
     socket.emit("id", socket.id);
 
     socket.on("move", (data) => {
+
         if (!players[socket.id]) return;
 
         players[socket.id].x = data.x;
@@ -28,10 +29,11 @@ io.on("connection", (socket) => {
     });
 
     socket.on("name", (name) => {
+
         if (!players[socket.id]) return;
 
         players[socket.id].name =
-            String(name).slice(0, 12);
+            String(name).slice(0,12);
     });
 
     socket.on("disconnect", () => {
@@ -41,7 +43,7 @@ io.on("connection", (socket) => {
 
 setInterval(() => {
     io.emit("state", players);
-}, 50);
+}, 100);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, "0.0.0.0");

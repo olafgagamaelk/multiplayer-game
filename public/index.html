@@ -61,23 +61,41 @@ let myId = null;
 let players = {};
 let renderPlayers = {};
 
+const MAP_WIDTH = 3000;
+const MAP_HEIGHT = 3000;
+
+const PLAYER_SIZE = 30;
+const SPEED = 3;
+
+const walls = [
+
+    {x:500,y:400,w:300,h:40},
+    {x:1000,y:900,w:40,h:300},
+    {x:1700,y:700,w:400,h:40},
+    {x:2200,y:1300,w:40,h:300},
+    {x:1200,y:1800,w:500,h:40},
+    {x:600,y:2200,w:40,h:350},
+    {x:2000,y:2200,w:500,h:40},
+    {x:2500,y:500,w:40,h:500}
+
+];
+
 const me = {
-    x: 200,
-    y: 200
+    x:1500,
+    y:1500
 };
 
 const keys = {};
-const speed = 5;
 
 let lastSend = 0;
 
 function lerp(a,b,t){
-    return a + (b-a) * t;
+    return a + (b-a)*t;
 }
 
 function resize(){
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
 }
 
 resize();
@@ -96,8 +114,8 @@ socket.on("state", data => {
         if(!renderPlayers[id]){
 
             renderPlayers[id] = {
-                x: players[id].x,
-                y: players[id].y
+                x:players[id].x,
+                y:players[id].y
             };
         }
     }
@@ -119,7 +137,6 @@ document.getElementById("saveBtn").onclick = () => {
         "name",
         document.getElementById("nameInput").value
     );
-
 };
 
 document.addEventListener("keydown", e => {
@@ -130,29 +147,91 @@ document.addEventListener("keyup", e => {
     keys[e.key.toLowerCase()] = false;
 });
 
+function rectCollision(a,b){
+
+    return (
+        a.x < b.x + b.w &&
+        a.x + a.w > b.x &&
+        a.y < b.y + b.h &&
+        a.y + a.h > b.y
+    );
+}
+
+function movePlayer(dx,dy){
+
+    const oldX = me.x;
+    const oldY = me.y;
+
+    me.x += dx;
+
+    for(const wall of walls){
+
+        if(rectCollision(
+            {
+                x:me.x,
+                y:me.y,
+                w:PLAYER_SIZE,
+                h:PLAYER_SIZE
+            },
+            wall
+        )){
+            me.x = oldX;
+            break;
+        }
+    }
+
+    me.y += dy;
+
+    for(const wall of walls){
+
+        if(rectCollision(
+            {
+                x:me.x,
+                y:me.y,
+                w:PLAYER_SIZE,
+                h:PLAYER_SIZE
+            },
+            wall
+        )){
+            me.y = oldY;
+            break;
+        }
+    }
+}
+
 function update(){
 
     let moved = false;
 
     if(keys["w"]){
-        me.y -= speed;
+        movePlayer(0,-SPEED);
         moved = true;
     }
 
     if(keys["s"]){
-        me.y += speed;
+        movePlayer(0,SPEED);
         moved = true;
     }
 
     if(keys["a"]){
-        me.x -= speed;
+        movePlayer(-SPEED,0);
         moved = true;
     }
 
     if(keys["d"]){
-        me.x += speed;
+        movePlayer(SPEED,0);
         moved = true;
     }
+
+    me.x = Math.max(
+        0,
+        Math.min(MAP_WIDTH - PLAYER_SIZE, me.x)
+    );
+
+    me.y = Math.max(
+        0,
+        Math.min(MAP_HEIGHT - PLAYER_SIZE, me.y)
+    );
 
     if(
         moved &&
@@ -160,8 +239,8 @@ function update(){
     ){
 
         socket.emit("move",{
-            x: me.x,
-            y: me.y
+            x:me.x,
+            y:me.y
         });
 
         lastSend = Date.now();
@@ -170,7 +249,13 @@ function update(){
 
 function draw(){
 
-    ctx.fillStyle = "#2ecc71";
+    const camX =
+        me.x - canvas.width/2;
+
+    const camY =
+        me.y - canvas.height/2;
+
+    ctx.fillStyle="#2ecc71";
     ctx.fillRect(
         0,
         0,
@@ -178,31 +263,56 @@ function draw(){
         canvas.height
     );
 
-    // MIG SELV
+    // map border
 
-    ctx.fillStyle = "red";
+    ctx.strokeStyle="white";
+    ctx.lineWidth=5;
+
+    ctx.strokeRect(
+        -camX,
+        -camY,
+        MAP_WIDTH,
+        MAP_HEIGHT
+    );
+
+    // walls
+
+    ctx.fillStyle="#888";
+
+    for(const wall of walls){
+
+        ctx.fillRect(
+            wall.x - camX,
+            wall.y - camY,
+            wall.w,
+            wall.h
+        );
+    }
+
+    // me
+
+    ctx.fillStyle="red";
 
     ctx.fillRect(
-        me.x,
-        me.y,
-        30,
-        30
+        me.x - camX,
+        me.y - camY,
+        PLAYER_SIZE,
+        PLAYER_SIZE
     );
 
     if(players[myId]){
 
-        ctx.fillStyle = "white";
-        ctx.font = "16px Arial";
-        ctx.textAlign = "center";
+        ctx.fillStyle="white";
+        ctx.textAlign="center";
 
         ctx.fillText(
             players[myId].name || "Player",
-            me.x + 15,
-            me.y - 10
+            me.x - camX + 15,
+            me.y - camY - 10
         );
     }
 
-    // ANDRE SPILLERE
+    // others
 
     for(const id in players){
 
@@ -213,48 +323,37 @@ function draw(){
 
         if(!rp) continue;
 
-        rp.x = lerp(
-            rp.x,
-            p.x,
-            0.20
-        );
+        rp.x = lerp(rp.x,p.x,0.2);
+        rp.y = lerp(rp.y,p.y,0.2);
 
-        rp.y = lerp(
-            rp.y,
-            p.y,
-            0.20
-        );
-
-        ctx.fillStyle = "blue";
+        ctx.fillStyle="blue";
 
         ctx.fillRect(
-            rp.x,
-            rp.y,
-            30,
-            30
+            rp.x - camX,
+            rp.y - camY,
+            PLAYER_SIZE,
+            PLAYER_SIZE
         );
 
-        ctx.fillStyle = "white";
-        ctx.font = "16px Arial";
-        ctx.textAlign = "center";
+        ctx.fillStyle="white";
 
         ctx.fillText(
             p.name || "Player",
-            rp.x + 15,
-            rp.y - 10
+            rp.x - camX + 15,
+            rp.y - camY - 10
         );
     }
 }
 
-function gameLoop(){
+function loop(){
 
     update();
     draw();
 
-    requestAnimationFrame(gameLoop);
+    requestAnimationFrame(loop);
 }
 
-gameLoop();
+loop();
 
 </script>
 

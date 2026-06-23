@@ -2,14 +2,17 @@
 <html lang="da">
 <head>
 <meta charset="UTF-8">
-<title>Fast Multiplayer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Multiplayer</title>
 
 <style>
+
 body{
     margin:0;
     overflow:hidden;
     background:#2ecc71;
-    font-family:Arial;
+    font-family:Arial,sans-serif;
 }
 
 canvas{
@@ -20,18 +23,29 @@ canvas{
     position:absolute;
     top:10px;
     left:10px;
+    z-index:10;
 }
+
+#nameInput{
+    padding:8px;
+    font-size:16px;
+}
+
+#saveBtn{
+    padding:8px 12px;
+    font-size:16px;
+}
+
 </style>
 </head>
-
 <body>
 
 <div id="ui">
-    <input id="nameInput" placeholder="Dit navn">
-    <button id="btn">Gem</button>
+    <input id="nameInput" maxlength="12" placeholder="Dit navn">
+    <button id="saveBtn">Gem navn</button>
 </div>
 
-<canvas id="c"></canvas>
+<canvas id="game"></canvas>
 
 <script src="/socket.io/socket.io.js"></script>
 
@@ -39,62 +53,66 @@ canvas{
 
 const socket = io();
 
-const canvas = document.getElementById("c");
+const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 let myId = null;
 
 let players = {};
 
-let me = {
-    x:200,
-    y:200
+const me = {
+    x: 200,
+    y: 200
 };
 
-let keys = {};
-let lastSend = 0;
+const keys = {};
+const speed = 5;
 
 function resize(){
-    canvas.width = innerWidth;
-    canvas.height = innerHeight;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }
 
 resize();
+
 window.addEventListener("resize", resize);
 
-socket.on("id", id=>{
+socket.on("id", id => {
     myId = id;
 });
 
-// SERVER MÅ IKKE FLYTTE MIG
-socket.on("state", data=>{
+socket.on("state", data => {
 
     players = data;
 
+    // IGNORER SERVERENS POSITION AF DIG SELV
+
     if(myId){
 
-        players[myId] = {
-            ...(players[myId] || {}),
-            x: me.x,
-            y: me.y
-        };
+        if(!players[myId]){
+            players[myId] = {};
+        }
+
+        players[myId].x = me.x;
+        players[myId].y = me.y;
     }
 });
 
-document.getElementById("btn").onclick = ()=>{
+document.getElementById("saveBtn").onclick = () => {
 
-    socket.emit(
-        "name",
-        document.getElementById("nameInput").value
-    );
+    const name =
+        document.getElementById("nameInput")
+        .value
+        .trim();
 
+    socket.emit("name", name);
 };
 
-document.addEventListener("keydown", e=>{
+document.addEventListener("keydown", e => {
     keys[e.key.toLowerCase()] = true;
 });
 
-document.addEventListener("keyup", e=>{
+document.addEventListener("keyup", e => {
     keys[e.key.toLowerCase()] = false;
 });
 
@@ -103,39 +121,37 @@ function update(){
     let moved = false;
 
     if(keys["w"]){
-        me.y -= 5;
+        me.y -= speed;
         moved = true;
     }
 
     if(keys["s"]){
-        me.y += 5;
+        me.y += speed;
         moved = true;
     }
 
     if(keys["a"]){
-        me.x -= 5;
+        me.x -= speed;
         moved = true;
     }
 
     if(keys["d"]){
-        me.x += 5;
+        me.x += speed;
         moved = true;
     }
 
-    if(moved && Date.now() - lastSend > 50){
+    if(moved){
 
         socket.emit("move",{
-            x:me.x,
-            y:me.y
+            x: me.x,
+            y: me.y
         });
-
-        lastSend = Date.now();
     }
 }
 
 function draw(){
 
-    ctx.fillStyle="#2ecc71";
+    ctx.fillStyle = "#2ecc71";
     ctx.fillRect(
         0,
         0,
@@ -143,14 +159,39 @@ function draw(){
         canvas.height
     );
 
+    // TEGN DIG SELV DIREKTE FRA LOKAL POSITION
+
+    ctx.fillStyle = "red";
+
+    ctx.fillRect(
+        me.x,
+        me.y,
+        30,
+        30
+    );
+
+    if(players[myId]){
+
+        ctx.fillStyle = "white";
+        ctx.font = "16px Arial";
+        ctx.textAlign = "center";
+
+        ctx.fillText(
+            players[myId].name || "Player",
+            me.x + 15,
+            me.y - 10
+        );
+    }
+
+    // TEGN ALLE ANDRE
+
     for(const id in players){
+
+        if(id === myId) continue;
 
         const p = players[id];
 
-        ctx.fillStyle =
-            id === myId
-            ? "red"
-            : "blue";
+        ctx.fillStyle = "blue";
 
         ctx.fillRect(
             p.x,
@@ -159,25 +200,27 @@ function draw(){
             30
         );
 
-        ctx.fillStyle="white";
+        ctx.fillStyle = "white";
+        ctx.font = "16px Arial";
+        ctx.textAlign = "center";
 
         ctx.fillText(
             p.name || "Player",
-            p.x,
-            p.y - 5
+            p.x + 15,
+            p.y - 10
         );
     }
 }
 
-function loop(){
+function gameLoop(){
 
     update();
     draw();
 
-    requestAnimationFrame(loop);
+    requestAnimationFrame(gameLoop);
 }
 
-loop();
+gameLoop();
 
 </script>
 

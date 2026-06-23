@@ -2,21 +2,24 @@
 <html lang="da">
 <head>
 <meta charset="UTF-8">
-<title>Multiplayer Standard</title>
+<title>Multiplayer Smooth</title>
 
 <style>
-body {
-    margin: 0;
-    overflow: hidden;
-    background: #2ecc71;
-    font-family: Arial;
+body{
+    margin:0;
+    overflow:hidden;
+    background:#2ecc71;
+    font-family:Arial;
 }
-canvas { display: block; }
 
-#ui {
-    position: absolute;
-    top: 10px;
-    left: 10px;
+canvas{
+    display:block;
+}
+
+#ui{
+    position:absolute;
+    top:10px;
+    left:10px;
 }
 </style>
 </head>
@@ -33,15 +36,22 @@ canvas { display: block; }
 <script src="/socket.io/socket.io.js"></script>
 
 <script>
+
 const socket = io();
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-let myId;
-let serverPlayers = {};
+let myId = null;
 
-let me = { x: 200, y: 200 };
+let serverPlayers = {};
+let renderPlayers = {};
+
+let me = {
+    x:200,
+    y:200
+};
+
 let keys = {};
 let lastSend = 0;
 
@@ -49,48 +59,93 @@ function lerp(a,b,t){
     return a + (b-a)*t;
 }
 
-// resize
 function resize(){
     canvas.width = innerWidth;
     canvas.height = innerHeight;
 }
+
 resize();
-addEventListener("resize", resize);
+window.addEventListener("resize", resize);
 
-// socket
-socket.on("id", id => myId = id);
-socket.on("state", data => serverPlayers = data);
+socket.on("id", id=>{
+    myId = id;
+});
 
-// name
-document.getElementById("btn").onclick = () => {
-    socket.emit("name", document.getElementById("nameInput").value);
+socket.on("state", data=>{
+    serverPlayers = data;
+
+    for(const id in data){
+
+        if(!renderPlayers[id]){
+            renderPlayers[id] = {
+                x:data[id].x,
+                y:data[id].y
+            };
+        }
+    }
+});
+
+document.getElementById("btn").onclick = ()=>{
+
+    socket.emit(
+        "name",
+        document.getElementById("nameInput").value
+    );
+
 };
 
-// input
-addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+document.addEventListener("keydown", e=>{
+    keys[e.key.toLowerCase()] = true;
+});
 
-// ───────────── CLIENT PREDICTION ─────────────
+document.addEventListener("keyup", e=>{
+    keys[e.key.toLowerCase()] = false;
+});
+
 function update(){
 
     let moved = false;
 
-    if(keys["w"]){ me.y -= 5; moved = true; }
-    if(keys["s"]){ me.y += 5; moved = true; }
-    if(keys["a"]){ me.x -= 5; moved = true; }
-    if(keys["d"]){ me.x += 5; moved = true; }
+    if(keys["w"]){
+        me.y -= 5;
+        moved = true;
+    }
+
+    if(keys["s"]){
+        me.y += 5;
+        moved = true;
+    }
+
+    if(keys["a"]){
+        me.x -= 5;
+        moved = true;
+    }
+
+    if(keys["d"]){
+        me.x += 5;
+        moved = true;
+    }
 
     if(moved && Date.now() - lastSend > 30){
-        socket.emit("move", me);
+
+        socket.emit("move",{
+            x:me.x,
+            y:me.y
+        });
+
         lastSend = Date.now();
     }
 }
 
-// ───────────── RENDER + INTERPOLATION ─────────────
 function draw(){
 
-    ctx.fillStyle = "#2ecc71";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle="#2ecc71";
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
 
     for(const id in serverPlayers){
 
@@ -98,32 +153,67 @@ function draw(){
 
         if(id === myId){
 
-            // local player = smooth correction
-            me.x = lerp(me.x, p.x, 0.2);
-            me.y = lerp(me.y, p.y, 0.2);
+            me.x = lerp(me.x,p.x,0.35);
+            me.y = lerp(me.y,p.y,0.35);
 
-            ctx.fillStyle = "red";
-            ctx.fillRect(me.x, me.y, 30, 30);
+            ctx.fillStyle="red";
 
-        } else {
+            ctx.fillRect(
+                me.x,
+                me.y,
+                30,
+                30
+            );
 
-            // other players = direct (simple interpolation base)
-            ctx.fillStyle = "blue";
-            ctx.fillRect(p.x, p.y, 30, 30);
+            ctx.fillStyle="white";
+
+            ctx.fillText(
+                p.name,
+                me.x,
+                me.y - 5
+            );
+
+        }else{
+
+            const rp = renderPlayers[id];
+
+            rp.x = lerp(
+                rp.x,
+                p.x,
+                0.15
+            );
+
+            rp.y = lerp(
+                rp.y,
+                p.y,
+                0.15
+            );
+
+            ctx.fillStyle="blue";
+
+            ctx.fillRect(
+                rp.x,
+                rp.y,
+                30,
+                30
+            );
+
+            ctx.fillStyle="white";
+
+            ctx.fillText(
+                p.name,
+                rp.x,
+                rp.y - 5
+            );
         }
-
-        ctx.fillStyle = "white";
-        ctx.fillText(p.name, p.x, p.y - 5);
     }
+
+    requestAnimationFrame(draw);
 }
 
-// loop
-function loop(){
-    update();
-    draw();
-    requestAnimationFrame(loop);
-}
-loop();
+setInterval(update,16);
+
+draw();
 
 </script>
 

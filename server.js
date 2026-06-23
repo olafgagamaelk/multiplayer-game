@@ -4,6 +4,7 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
+
 const io = new Server(server, {
     pingTimeout: 60000,
     pingInterval: 25000
@@ -26,6 +27,7 @@ io.on("connection", (socket) => {
     socket.on("move", (data) => {
 
         const p = players[socket.id];
+
         if (!p) return;
 
         p.x = data.x;
@@ -35,6 +37,7 @@ io.on("connection", (socket) => {
     socket.on("name", (name) => {
 
         const p = players[socket.id];
+
         if (!p) return;
 
         p.name =
@@ -48,7 +51,6 @@ io.on("connection", (socket) => {
     });
 });
 
-// 20 updates/sekund
 setInterval(() => {
     io.emit("state", players);
 }, 50);

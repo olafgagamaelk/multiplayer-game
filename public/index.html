@@ -2,7 +2,7 @@
 <html lang="da">
 <head>
 <meta charset="UTF-8">
-<title>Multiplayer Smooth</title>
+<title>Simple Multiplayer</title>
 
 <style>
 body{
@@ -27,8 +27,8 @@ canvas{
 <body>
 
 <div id="ui">
-    <input id="nameInput" placeholder="navn">
-    <button id="btn">gem</button>
+    <input id="nameInput" placeholder="Dit navn">
+    <button id="btn">Gem</button>
 </div>
 
 <canvas id="c"></canvas>
@@ -43,28 +43,23 @@ const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
 let myId = null;
-
-let serverPlayers = {};
-let renderPlayers = {};
+let players = {};
 
 let me = {
-    x:200,
-    y:200
+    x: 200,
+    y: 200
 };
 
 let keys = {};
 let lastSend = 0;
 
-function lerp(a,b,t){
-    return a + (b-a)*t;
-}
-
 function resize(){
-    canvas.width = innerWidth;
-    canvas.height = innerHeight;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }
 
 resize();
+
 window.addEventListener("resize", resize);
 
 socket.on("id", id=>{
@@ -72,16 +67,12 @@ socket.on("id", id=>{
 });
 
 socket.on("state", data=>{
-    serverPlayers = data;
 
-    for(const id in data){
+    players = data;
 
-        if(!renderPlayers[id]){
-            renderPlayers[id] = {
-                x:data[id].x,
-                y:data[id].y
-            };
-        }
+    if(myId && players[myId]){
+        me.x = players[myId].x;
+        me.y = players[myId].y;
     }
 });
 
@@ -129,8 +120,8 @@ function update(){
     if(moved && Date.now() - lastSend > 30){
 
         socket.emit("move",{
-            x:me.x,
-            y:me.y
+            x: me.x,
+            y: me.y
         });
 
         lastSend = Date.now();
@@ -139,7 +130,7 @@ function update(){
 
 function draw(){
 
-    ctx.fillStyle="#2ecc71";
+    ctx.fillStyle = "#2ecc71";
     ctx.fillRect(
         0,
         0,
@@ -147,73 +138,42 @@ function draw(){
         canvas.height
     );
 
-    for(const id in serverPlayers){
+    for(const id in players){
 
-        const p = serverPlayers[id];
+        const p = players[id];
 
-        if(id === myId){
+        ctx.fillStyle =
+            id === myId
+            ? "red"
+            : "blue";
 
-            me.x = lerp(me.x,p.x,0.35);
-            me.y = lerp(me.y,p.y,0.35);
+        ctx.fillRect(
+            p.x,
+            p.y,
+            30,
+            30
+        );
 
-            ctx.fillStyle="red";
+        ctx.fillStyle = "white";
+        ctx.font = "14px Arial";
 
-            ctx.fillRect(
-                me.x,
-                me.y,
-                30,
-                30
-            );
-
-            ctx.fillStyle="white";
-
-            ctx.fillText(
-                p.name,
-                me.x,
-                me.y - 5
-            );
-
-        }else{
-
-            const rp = renderPlayers[id];
-
-            rp.x = lerp(
-                rp.x,
-                p.x,
-                0.15
-            );
-
-            rp.y = lerp(
-                rp.y,
-                p.y,
-                0.15
-            );
-
-            ctx.fillStyle="blue";
-
-            ctx.fillRect(
-                rp.x,
-                rp.y,
-                30,
-                30
-            );
-
-            ctx.fillStyle="white";
-
-            ctx.fillText(
-                p.name,
-                rp.x,
-                rp.y - 5
-            );
-        }
+        ctx.fillText(
+            p.name,
+            p.x,
+            p.y - 5
+        );
     }
-
-    requestAnimationFrame(draw);
 }
 
-setInterval(update,16);
+function loop(){
 
-draw();
+    update();
+    draw();
+
+    requestAnimationFrame(loop);
+}
+
+loop();
 
 </script>
 

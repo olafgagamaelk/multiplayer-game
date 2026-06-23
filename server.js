@@ -33,7 +33,7 @@ io.on("connection", (socket) => {
         if (!players[socket.id]) return;
 
         players[socket.id].name =
-            String(name).slice(0,12);
+            String(name).substring(0, 12) || "Player";
     });
 
     socket.on("disconnect", () => {
@@ -46,4 +46,7 @@ setInterval(() => {
 }, 100);
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, "0.0.0.0");
+
+server.listen(PORT, "0.0.0.0", () => {
+    console.log("Server started");
+});

@@ -3,15 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Multiplayer</title>
 
 <style>
-
 body{
     margin:0;
     overflow:hidden;
-    background:#2ecc71;
     font-family:Arial,sans-serif;
 }
 
@@ -28,14 +25,11 @@ canvas{
 
 #nameInput{
     padding:8px;
-    font-size:16px;
 }
 
 #saveBtn{
     padding:8px 12px;
-    font-size:16px;
 }
-
 </style>
 </head>
 <body>
@@ -61,29 +55,39 @@ let myId = null;
 let players = {};
 let renderPlayers = {};
 
-const MAP_WIDTH = 3000;
-const MAP_HEIGHT = 3000;
+const MAP_WIDTH = 1400;
+const MAP_HEIGHT = 900;
 
 const PLAYER_SIZE = 30;
-const SPEED = 3;
+const SPEED = 2.6;
 
 const walls = [
 
-    {x:500,y:400,w:300,h:40},
-    {x:1000,y:900,w:40,h:300},
-    {x:1700,y:700,w:400,h:40},
-    {x:2200,y:1300,w:40,h:300},
-    {x:1200,y:1800,w:500,h:40},
-    {x:600,y:2200,w:40,h:350},
-    {x:2000,y:2200,w:500,h:40},
-    {x:2500,y:500,w:40,h:500}
+{x:120,y:120,w:220,h:40,r:20},
+{x:450,y:90,w:180,h:40,r:-25},
+{x:850,y:130,w:240,h:40,r:15},
+
+{x:180,y:300,w:40,h:220,r:35},
+{x:500,y:260,w:280,h:40,r:-15},
+{x:980,y:250,w:40,h:240,r:10},
+
+{x:250,y:600,w:220,h:40,r:30},
+{x:650,y:540,w:40,h:220,r:-20},
+{x:900,y:650,w:260,h:40,r:12},
+
+{x:1080,y:430,w:180,h:40,r:-35},
+{x:320,y:430,w:160,h:40,r:45},
+{x:730,y:350,w:170,h:40,r:-40}
 
 ];
 
 const me = {
-    x:1500,
-    y:1500
+    x: 700,
+    y: 450
 };
+
+let camX = 0;
+let camY = 0;
 
 const keys = {};
 
@@ -101,11 +105,11 @@ function resize(){
 resize();
 window.addEventListener("resize", resize);
 
-socket.on("id", id => {
+socket.on("id", id=>{
     myId = id;
 });
 
-socket.on("state", data => {
+socket.on("state", data=>{
 
     players = data;
 
@@ -114,8 +118,8 @@ socket.on("state", data => {
         if(!renderPlayers[id]){
 
             renderPlayers[id] = {
-                x:players[id].x,
-                y:players[id].y
+                x: players[id].x,
+                y: players[id].y
             };
         }
     }
@@ -131,7 +135,7 @@ socket.on("state", data => {
     }
 });
 
-document.getElementById("saveBtn").onclick = () => {
+document.getElementById("saveBtn").onclick = ()=>{
 
     socket.emit(
         "name",
@@ -139,11 +143,11 @@ document.getElementById("saveBtn").onclick = () => {
     );
 };
 
-document.addEventListener("keydown", e => {
+document.addEventListener("keydown", e=>{
     keys[e.key.toLowerCase()] = true;
 });
 
-document.addEventListener("keyup", e => {
+document.addEventListener("keyup", e=>{
     keys[e.key.toLowerCase()] = false;
 });
 
@@ -245,28 +249,90 @@ function update(){
 
         lastSend = Date.now();
     }
+
+    const targetCamX =
+        me.x - canvas.width/2 + PLAYER_SIZE/2;
+
+    const targetCamY =
+        me.y - canvas.height/2 + PLAYER_SIZE/2;
+
+    camX = lerp(camX,targetCamX,0.08);
+    camY = lerp(camY,targetCamY,0.08);
+}
+
+function drawGrass(){
+
+    ctx.fillStyle = "#57c76d";
+    ctx.fillRect(
+        -camX,
+        -camY,
+        MAP_WIDTH,
+        MAP_HEIGHT
+    );
+
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+
+    for(let x=0;x<MAP_WIDTH;x+=40){
+
+        for(let y=0;y<MAP_HEIGHT;y+=40){
+
+            ctx.fillRect(
+                x-camX,
+                y-camY,
+                4,
+                4
+            );
+        }
+    }
+}
+
+function drawWall(wall){
+
+    ctx.save();
+
+    ctx.translate(
+        wall.x + wall.w/2 - camX,
+        wall.y + wall.h/2 - camY
+    );
+
+    ctx.rotate(
+        wall.r * Math.PI / 180
+    );
+
+    ctx.fillStyle = "#8b8b8b";
+
+    ctx.fillRect(
+        -wall.w/2,
+        -wall.h/2,
+        wall.w,
+        wall.h
+    );
+
+    ctx.fillStyle = "#a5a5a5";
+
+    ctx.fillRect(
+        -wall.w/2,
+        -wall.h/2,
+        wall.w,
+        6
+    );
+
+    ctx.restore();
 }
 
 function draw(){
 
-    const camX =
-        me.x - canvas.width/2;
-
-    const camY =
-        me.y - canvas.height/2;
-
-    ctx.fillStyle="#2ecc71";
-    ctx.fillRect(
+    ctx.clearRect(
         0,
         0,
         canvas.width,
         canvas.height
     );
 
-    // map border
+    drawGrass();
 
-    ctx.strokeStyle="white";
-    ctx.lineWidth=5;
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 4;
 
     ctx.strokeRect(
         -camX,
@@ -275,23 +341,11 @@ function draw(){
         MAP_HEIGHT
     );
 
-    // walls
-
-    ctx.fillStyle="#888";
-
     for(const wall of walls){
-
-        ctx.fillRect(
-            wall.x - camX,
-            wall.y - camY,
-            wall.w,
-            wall.h
-        );
+        drawWall(wall);
     }
 
-    // me
-
-    ctx.fillStyle="red";
+    ctx.fillStyle = "red";
 
     ctx.fillRect(
         me.x - camX,
@@ -302,8 +356,8 @@ function draw(){
 
     if(players[myId]){
 
-        ctx.fillStyle="white";
-        ctx.textAlign="center";
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
 
         ctx.fillText(
             players[myId].name || "Player",
@@ -311,8 +365,6 @@ function draw(){
             me.y - camY - 10
         );
     }
-
-    // others
 
     for(const id in players){
 
@@ -326,7 +378,7 @@ function draw(){
         rp.x = lerp(rp.x,p.x,0.2);
         rp.y = lerp(rp.y,p.y,0.2);
 
-        ctx.fillStyle="blue";
+        ctx.fillStyle = "blue";
 
         ctx.fillRect(
             rp.x - camX,
@@ -335,7 +387,7 @@ function draw(){
             PLAYER_SIZE
         );
 
-        ctx.fillStyle="white";
+        ctx.fillStyle = "white";
 
         ctx.fillText(
             p.name || "Player",

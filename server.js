@@ -4,7 +4,10 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    pingTimeout: 60000,
+    pingInterval: 25000
+});
 
 app.use(express.static("public"));
 
@@ -22,18 +25,22 @@ io.on("connection", (socket) => {
 
     socket.on("move", (data) => {
 
-        if (!players[socket.id]) return;
+        const p = players[socket.id];
+        if (!p) return;
 
-        players[socket.id].x = data.x;
-        players[socket.id].y = data.y;
+        p.x = data.x;
+        p.y = data.y;
     });
 
     socket.on("name", (name) => {
 
-        if (!players[socket.id]) return;
+        const p = players[socket.id];
+        if (!p) return;
 
-        players[socket.id].name =
-            String(name).substring(0, 12) || "Player";
+        p.name =
+            String(name)
+            .trim()
+            .substring(0, 12) || "Player";
     });
 
     socket.on("disconnect", () => {
@@ -41,9 +48,10 @@ io.on("connection", (socket) => {
     });
 });
 
+// 20 updates/sekund
 setInterval(() => {
     io.emit("state", players);
-}, 100);
+}, 50);
 
 const PORT = process.env.PORT || 3000;
 

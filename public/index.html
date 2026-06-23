@@ -3,22 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Multiplayer OBB Fix</title>
+<title>Fix Multiplayer</title>
 
 <style>
-body{
-    margin:0;
-    overflow:hidden;
-    font-family:Arial;
-}
+body{margin:0;overflow:hidden;font-family:Arial;}
 canvas{display:block;}
-
-#ui{
-    position:absolute;
-    top:10px;
-    left:10px;
-    z-index:10;
-}
+#ui{position:absolute;top:10px;left:10px;z-index:10;}
 #nameInput{padding:8px;}
 #saveBtn{padding:8px 12px;}
 </style>
@@ -27,8 +17,8 @@ canvas{display:block;}
 <body>
 
 <div id="ui">
-    <input id="nameInput" maxlength="12" placeholder="navn">
-    <button id="saveBtn">gem</button>
+<input id="nameInput" maxlength="12">
+<button id="saveBtn">save</button>
 </div>
 
 <canvas id="game"></canvas>
@@ -41,245 +31,215 @@ const socket = io();
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-let myId = null;
-let players = {};
-let renderPlayers = {};
+let myId=null;
+let players={};
+let renderPlayers={};
 
-const MAP_W = 1400;
-const MAP_H = 900;
+const SIZE=30;
+const SPEED=2.6;
 
-const SIZE = 30;
-const SPEED = 2.6;
+const MAP_W=1400;
+const MAP_H=900;
 
-let camX = 0;
-let camY = 0;
+let camX=0;
+let camY=0;
 
-const keys = {};
-let lastSend = 0;
+const keys={};
+let lastSend=0;
 
 /* ---------------- WALLS ---------------- */
 
-const walls = [
-    {x:200,y:120,w:300,h:40,a:25},
-    {x:600,y:100,w:250,h:40,a:-20},
-    {x:950,y:180,w:200,h:40,a:15},
-
-    {x:300,y:300,w:40,h:250,a:35},
-    {x:500,y:260,w:350,h:40,a:-10},
-    {x:900,y:300,w:40,h:300,a:20},
-
-    {x:200,y:650,w:300,h:40,a:30},
-    {x:650,y:500,w:40,h:250,a:-25},
-    {x:900,y:650,w:250,h:40,a:10}
+const walls=[
+{x:200,y:120,w:300,h:40,a:25},
+{x:600,y:100,w:250,h:40,a:-20},
+{x:950,y:180,w:200,h:40,a:15},
+{x:300,y:300,w:40,h:250,a:35},
+{x:500,y:260,w:350,h:40,a:-10},
+{x:900,y:300,w:40,h:300,a:20},
+{x:200,y:650,w:300,h:40,a:30},
+{x:650,y:500,w:40,h:250,a:-25},
+{x:900,y:650,w:250,h:40,a:10}
 ];
 
-/* ---------------- PLAYER ---------------- */
-
-const me = { x:700, y:450 };
+const me={x:700,y:450};
 
 /* ---------------- SOCKET ---------------- */
 
-socket.on("id", id => myId = id);
+socket.on("id",id=>myId=id);
 
-socket.on("state", data => {
-    players = data;
+socket.on("state",data=>{
+players=data;
 
-    for(const id in players){
-        if(!renderPlayers[id]){
-            renderPlayers[id] = {
-                x:players[id].x,
-                y:players[id].y
-            };
-        }
-    }
+for(const id in players){
+if(!renderPlayers[id]){
+renderPlayers[id]={x:players[id].x,y:players[id].y};
+}
+}
 
-    if(myId && players[myId]){
-        players[myId].x = me.x;
-        players[myId].y = me.y;
-    }
+if(players[myId]){
+players[myId].x=me.x;
+players[myId].y=me.y;
+}
 });
 
 /* ---------------- INPUT ---------------- */
 
-document.addEventListener("keydown", e=>{
-    keys[e.key.toLowerCase()] = true;
-});
-document.addEventListener("keyup", e=>{
-    keys[e.key.toLowerCase()] = false;
-});
+addEventListener("keydown",e=>keys[e.key.toLowerCase()]=true);
+addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
 
-/* ---------------- NAME ---------------- */
-
-document.getElementById("saveBtn").onclick = ()=>{
-    socket.emit("name",
-        document.getElementById("nameInput").value
-    );
+document.getElementById("saveBtn").onclick=()=>{
+socket.emit("name",document.getElementById("nameInput").value);
 };
 
 /* ---------------- MATH ---------------- */
 
-function lerp(a,b,t){
-    return a + (b-a)*t;
+function lerp(a,b,t){return a+(b-a)*t;}
+
+/* ---------------- RECT COLLISION (SAFE) ---------------- */
+
+function rect(a,b){
+return (
+a.x < b.x+b.w &&
+a.x+a.w > b.x &&
+a.y < b.y+b.h &&
+a.y+a.h > b.y
+);
 }
 
-/* ---------------- OBB COLLISION ---------------- */
+/* ---------------- ROTATION HELP ---------------- */
 
 function rotate(px,py,cx,cy,ang){
-    const s = Math.sin(ang);
-    const c = Math.cos(ang);
+const s=Math.sin(ang);
+const c=Math.cos(ang);
 
-    px -= cx;
-    py -= cy;
+px-=cx;
+py-=cy;
 
-    return {
-        x: px * c + py * s,
-        y: -px * s + py * c
-    };
+return {
+x:px*c+py*s,
+y:-px*s+py*c
+};
 }
 
-function checkOBB(px,py,wall){
+/* ---------------- OBB FIXED ---------------- */
 
-    const ang = wall.a * Math.PI/180;
+function insideWall(px,py,w){
 
-    const cx = wall.x + wall.w/2;
-    const cy = wall.y + wall.h/2;
+const ang=w.a*Math.PI/180;
 
-    const p = rotate(px,py,cx,cy,ang);
+const cx=w.x+w.w/2;
+const cy=w.y+w.h/2;
 
-    return (
-        p.x > wall.x &&
-        p.x < wall.x + wall.w &&
-        p.y > wall.y &&
-        p.y < wall.y + wall.h
-    );
+const p=rotate(px,py,cx,cy,ang);
+
+return (
+p.x>w.x &&
+p.x<w.x+w.w &&
+p.y>w.y &&
+p.y<w.y+w.h
+);
 }
 
 /* ---------------- MOVE ---------------- */
 
 function move(dx,dy){
 
-    const oldX = me.x;
-    const oldY = me.y;
+const ox=me.x;
+const oy=me.y;
 
-    me.x += dx;
+me.x+=dx;
 
-    for(const w of walls){
-        if(checkOBB(me.x,me.y,w)){
-            me.x = oldX;
-            break;
-        }
-    }
+for(const w of walls){
+if(insideWall(me.x,me.y,w)){
+me.x=ox;
+break;
+}
+}
 
-    me.y += dy;
+me.y+=dy;
 
-    for(const w of walls){
-        if(checkOBB(me.x,me.y,w)){
-            me.y = oldY;
-            break;
-        }
-    }
+for(const w of walls){
+if(insideWall(me.x,me.y,w)){
+me.y=oy;
+break;
+}
+}
 }
 
 /* ---------------- UPDATE ---------------- */
 
 function update(){
 
-    let moved = false;
+let moved=false;
 
-    if(keys["w"]){ move(0,-SPEED); moved=true; }
-    if(keys["s"]){ move(0,SPEED); moved=true; }
-    if(keys["a"]){ move(-SPEED,0); moved=true; }
-    if(keys["d"]){ move(SPEED,0); moved=true; }
+if(keys.w){move(0,-SPEED);moved=true;}
+if(keys.s){move(0,SPEED);moved=true;}
+if(keys.a){move(-SPEED,0);moved=true;}
+if(keys.d){move(SPEED,0);moved=true;}
 
-    if(moved && Date.now()-lastSend>50){
-        socket.emit("move",{x:me.x,y:me.y});
-        lastSend = Date.now();
-    }
+if(moved && Date.now()-lastSend>50){
+socket.emit("move",{x:me.x,y:me.y});
+lastSend=Date.now();
+}
 
-    const targetX = me.x - canvas.width/2 + SIZE/2;
-    const targetY = me.y - canvas.height/2 + SIZE/2;
-
-    camX = lerp(camX,targetX,0.08);
-    camY = lerp(camY,targetY,0.08);
+/* CAMERA (IMPORTANT FIX) */
+camX=lerp(camX,me.x-canvas.width/2,0.1);
+camY=lerp(camY,me.y-canvas.height/2,0.1);
 }
 
 /* ---------------- DRAW ---------------- */
 
-function drawGrass(){
-
-    ctx.fillStyle = "#57c76d";
-    ctx.fillRect(-camX,-camY,MAP_W,MAP_H);
-
-    ctx.strokeStyle = "rgba(255,255,255,0.06)";
-
-    for(let x=0;x<MAP_W;x+=25){
-        for(let y=0;y<MAP_H;y+=25){
-            ctx.beginPath();
-            ctx.moveTo(x-camX,y-camY+4);
-            ctx.lineTo(x-camX+2,y-camY-4);
-            ctx.stroke();
-        }
-    }
-}
-
-function drawWall(w){
-
-    const ang = w.a * Math.PI/180;
-
-    ctx.save();
-
-    ctx.translate(
-        w.x + w.w/2 - camX,
-        w.y + w.h/2 - camY
-    );
-
-    ctx.rotate(ang);
-
-    ctx.fillStyle="#7a7a7a";
-    ctx.fillRect(-w.w/2,-w.h/2,w.w,w.h);
-
-    ctx.fillStyle="#9c9c9c";
-    ctx.fillRect(-w.w/2,-w.h/2,w.w,6);
-
-    ctx.restore();
-}
-
-/* ---------------- LOOP ---------------- */
-
 function draw(){
 
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    drawGrass();
+ctx.save();
+ctx.translate(-camX,-camY);
 
-    for(const w of walls){
-        drawWall(w);
-    }
+/* grass */
+ctx.fillStyle="#57c76d";
+ctx.fillRect(camX,camY,MAP_W,MAP_H);
 
-    ctx.fillStyle="red";
-    ctx.fillRect(me.x-camX,me.y-camY,SIZE,SIZE);
+/* walls */
+for(const w of walls){
 
-    for(const id in players){
+ctx.save();
+ctx.translate(w.x+w.w/2,w.y+w.h/2);
+ctx.rotate(w.a*Math.PI/180);
 
-        if(id === myId) continue;
+ctx.fillStyle="#777";
+ctx.fillRect(-w.w/2,-w.h/2,w.w,w.h);
 
-        const p = players[id];
-        const rp = renderPlayers[id];
+ctx.restore();
+}
 
-        if(!rp) continue;
+/* player */
+ctx.fillStyle="red";
+ctx.fillRect(me.x,me.y,SIZE,SIZE);
 
-        rp.x = lerp(rp.x,p.x,0.2);
-        rp.y = lerp(rp.y,p.y,0.2);
+/* others */
+for(const id in players){
+if(id===myId) continue;
 
-        ctx.fillStyle="blue";
-        ctx.fillRect(rp.x-camX,rp.y-camY,SIZE,SIZE);
-    }
+const p=players[id];
+const r=renderPlayers[id];
+
+if(!r) continue;
+
+r.x=lerp(r.x,p.x,0.2);
+r.y=lerp(r.y,p.y,0.2);
+
+ctx.fillStyle="blue";
+ctx.fillRect(r.x,r.y,SIZE,SIZE);
+}
+
+ctx.restore();
 }
 
 function loop(){
-    update();
-    draw();
-    requestAnimationFrame(loop);
+update();
+draw();
+requestAnimationFrame(loop);
 }
 
 loop();

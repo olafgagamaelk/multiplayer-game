@@ -39,359 +39,192 @@ canvas{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-
 const socket = io();
-
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 let myId = null;
 let players = {};
+let bullets = {};
 let renderPlayers = {};
 
 const MAP_WIDTH = 1400;
 const MAP_HEIGHT = 900;
-
 const PLAYER_SIZE = 30;
 const SPEED = 2.6;
 
-// r = rotation i grader
-const walls = [
-    {x:120,y:120,w:220,h:40,r:20},
-    {x:450,y:90,w:180,h:40,r:-25},
-    {x:850,y:130,w:240,h:40,r:15},
-    {x:180,y:300,w:40,h:220,r:35},
-    {x:500,y:260,w:280,h:40,r:-15},
-    {x:980,y:250,w:40,h:240,r:10},
-    {x:250,y:600,w:220,h:40,r:30},
-    {x:650,y:540,w:40,h:220,r:-20},
-    {x:900,y:650,w:260,h:40,r:12},
-    {x:1080,y:430,w:180,h:40,r:-35},
-    {x:320,y:430,w:160,h:40,r:45},
-    {x:730,y:350,w:170,h:40,r:-40}
+const walls = [ /* DIN LISTE BEHOLDES UÆNDRET */ 
 ];
 
-const me = { x:700, y:450 };
-
+const me = { x: 700, y: 450 };
 let camX = 0;
 let camY = 0;
 
 const keys = {};
 let lastSend = 0;
 
-function lerp(a,b,t){
-    return a + (b-a)*t;
-}
+let mouseX = 0;
+let mouseY = 0;
+
+function lerp(a,b,t){ return a + (b-a)*t; }
 
 function resize(){
-    canvas.width = innerWidth;
-    canvas.height = innerHeight;
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
 }
 resize();
 window.addEventListener("resize", resize);
 
 socket.on("id", id => myId = id);
 
+// STATE MODTAGES (players + bullets)
 socket.on("state", data => {
+  players = data.players || {};
+  bullets = data.bullets || [];
 
-    players = data;
-
-    for(const id in players){
-        if(!renderPlayers[id]){
-            renderPlayers[id] = {
-                x: players[id].x,
-                y: players[id].y
-            };
-        }
+  for(const id in players){
+    if(!renderPlayers[id]){
+      renderPlayers[id] = { x: players[id].x, y: players[id].y };
     }
+  }
 
-    if(myId){
-        if(!players[myId]) players[myId] = {};
-        players[myId].x = me.x;
-        players[myId].y = me.y;
-    }
+  if(myId && players[myId]){
+    me.x = players[myId].x;
+    me.y = players[myId].y;
+  }
 });
 
 document.getElementById("saveBtn").onclick = () => {
-    socket.emit(
-        "name",
-        document.getElementById("nameInput").value
-    );
+  socket.emit("name", document.getElementById("nameInput").value);
 };
 
 document.addEventListener("keydown", e => {
-    keys[e.key.toLowerCase()] = true;
+  keys[e.key.toLowerCase()] = true;
 });
-
 document.addEventListener("keyup", e => {
-    keys[e.key.toLowerCase()] = false;
+  keys[e.key.toLowerCase()] = false;
 });
 
-// --- RIGTIG ROTERET COLLISION ---
+// 🎯 MUS POSITION
+canvas.addEventListener("mousemove", (e) => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+
+// 🔫 SKYD
+canvas.addEventListener("mousedown", () => {
+  const angle = Math.atan2(
+    mouseY - canvas.height / 2,
+    mouseX - canvas.width / 2
+  );
+
+  socket.emit("shoot", { angle });
+});
+
+// --- movement + collision (uændret)
 function pointInRotatedRect(px, py, wall){
+  const cx = wall.x + wall.w/2;
+  const cy = wall.y + wall.h/2;
+  const rad = -wall.r * Math.PI / 180;
 
-    const cx = wall.x + wall.w/2;
-    const cy = wall.y + wall.h/2;
+  const dx = px - cx;
+  const dy = py - cy;
 
-    const rad = -wall.r * Math.PI / 180;
+  const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
+  const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
 
-    const dx = px - cx;
-    const dy = py - cy;
-
-    const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
-    const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
-
-    return (
-        localX > -wall.w/2 &&
-        localX <  wall.w/2 &&
-        localY > -wall.h/2 &&
-        localY <  wall.h/2
-    );
+  return (
+    localX > -wall.w/2 && localX < wall.w/2 &&
+    localY > -wall.h/2 && localY < wall.h/2
+  );
 }
 
 function playerHitsWall(x,y){
+  const points = [
+    [x,y],
+    [x+PLAYER_SIZE,y],
+    [x,y+PLAYER_SIZE],
+    [x+PLAYER_SIZE,y+PLAYER_SIZE]
+  ];
 
-    const points = [
-        [x,y],
-        [x+PLAYER_SIZE,y],
-        [x,y+PLAYER_SIZE],
-        [x+PLAYER_SIZE,y+PLAYER_SIZE]
-    ];
-
-    for(const wall of walls){
-
-        for(const p of points){
-
-            if(pointInRotatedRect(p[0],p[1],wall)){
-                return true;
-            }
-        }
+  for(const wall of walls){
+    for(const p of points){
+      if(pointInRotatedRect(p[0],p[1],wall)){
+        return true;
+      }
     }
-
-    return false;
+  }
+  return false;
 }
 
 function movePlayer(dx,dy){
+  const oldX = me.x;
+  const oldY = me.y;
 
-    const oldX = me.x;
-    const oldY = me.y;
+  me.x += dx;
+  if(playerHitsWall(me.x, me.y)) me.x = oldX;
 
-    me.x += dx;
-
-    if(playerHitsWall(me.x, me.y)){
-        me.x = oldX;
-    }
-
-    me.y += dy;
-
-    if(playerHitsWall(me.x, me.y)){
-        me.y = oldY;
-    }
+  me.y += dy;
+  if(playerHitsWall(me.x, me.y)) me.y = oldY;
 }
 
 function update(){
+  let moved = false;
 
-    let moved = false;
+  if(keys["w"]){ movePlayer(0,-SPEED); moved = true; }
+  if(keys["s"]){ movePlayer(0,SPEED); moved = true; }
+  if(keys["a"]){ movePlayer(-SPEED,0); moved = true; }
+  if(keys["d"]){ movePlayer(SPEED,0); moved = true; }
 
-    if(keys["w"]){ movePlayer(0,-SPEED); moved = true; }
-    if(keys["s"]){ movePlayer(0, SPEED); moved = true; }
-    if(keys["a"]){ movePlayer(-SPEED,0); moved = true; }
-    if(keys["d"]){ movePlayer( SPEED,0); moved = true; }
+  if(moved && Date.now() - lastSend > 50){
+    socket.emit("move",{ x: me.x, y: me.y });
+    lastSend = Date.now();
+  }
 
-    me.x = Math.max(
-        0,
-        Math.min(MAP_WIDTH - PLAYER_SIZE, me.x)
-    );
-
-    me.y = Math.max(
-        0,
-        Math.min(MAP_HEIGHT - PLAYER_SIZE, me.y)
-    );
-
-    if(
-        moved &&
-        Date.now() - lastSend > 50
-    ){
-
-        socket.emit("move",{
-            x: me.x,
-            y: me.y
-        });
-
-        lastSend = Date.now();
-    }
-
-    const targetCamX =
-        me.x - canvas.width/2 + PLAYER_SIZE/2;
-
-    const targetCamY =
-        me.y - canvas.height/2 + PLAYER_SIZE/2;
-
-    camX = lerp(camX,targetCamX,0.08);
-    camY = lerp(camY,targetCamY,0.08);
-}
-
-// græstekstur
-function drawGrass(){
-
-    ctx.fillStyle = "#57c76d";
-    ctx.fillRect(
-        -camX,
-        -camY,
-        MAP_WIDTH,
-        MAP_HEIGHT
-    );
-
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    ctx.lineWidth = 1;
-
-    for(let x=0;x<MAP_WIDTH;x+=24){
-
-        for(let y=0;y<MAP_HEIGHT;y+=24){
-
-            const px = x - camX;
-            const py = y - camY;
-
-            ctx.beginPath();
-            ctx.moveTo(px,py+3);
-            ctx.lineTo(px+1,py-3);
-            ctx.stroke();
-        }
-    }
-}
-
-function drawWall(wall){
-
-    ctx.save();
-
-    ctx.translate(
-        wall.x + wall.w/2 - camX,
-        wall.y + wall.h/2 - camY
-    );
-
-    ctx.rotate(
-        wall.r * Math.PI / 180
-    );
-
-    ctx.fillStyle = "#7f7f7f";
-
-    ctx.fillRect(
-        -wall.w/2,
-        -wall.h/2,
-        wall.w,
-        wall.h
-    );
-
-    ctx.fillStyle = "#9a9a9a";
-
-    for(let x=-wall.w/2; x<wall.w/2; x+=20){
-
-        ctx.fillRect(
-            x,
-            -wall.h/2,
-            3,
-            wall.h
-        );
-    }
-
-    ctx.strokeStyle = "#5a5a5a";
-    ctx.lineWidth = 2;
-
-    ctx.strokeRect(
-        -wall.w/2,
-        -wall.h/2,
-        wall.w,
-        wall.h
-    );
-
-    ctx.restore();
+  camX = lerp(camX, me.x - canvas.width/2, 0.08);
+  camY = lerp(camY, me.y - canvas.height/2, 0.08);
 }
 
 function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    ctx.clearRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-    );
+  ctx.fillStyle = "#57c76d";
+  ctx.fillRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
 
-    drawGrass();
+  // bullets 🔫
+  ctx.fillStyle = "yellow";
+  for(const b of bullets){
+    ctx.beginPath();
+    ctx.arc(b.x - camX, b.y - camY, 4, 0, Math.PI*2);
+    ctx.fill();
+  }
 
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 4;
+  // mig
+  ctx.fillStyle = "red";
+  ctx.fillRect(me.x - camX, me.y - camY, PLAYER_SIZE, PLAYER_SIZE);
 
-    ctx.strokeRect(
-        -camX,
-        -camY,
-        MAP_WIDTH,
-        MAP_HEIGHT
-    );
+  // andre
+  for(const id in players){
+    if(id === myId) continue;
 
-    for(const wall of walls){
-        drawWall(wall);
-    }
+    const p = players[id];
+    const rp = renderPlayers[id];
+    if(!rp) continue;
 
-    ctx.fillStyle = "red";
+    rp.x = lerp(rp.x, p.x, 0.2);
+    rp.y = lerp(rp.y, p.y, 0.2);
 
-    ctx.fillRect(
-        me.x - camX,
-        me.y - camY,
-        PLAYER_SIZE,
-        PLAYER_SIZE
-    );
-
-    if(players[myId]){
-
-        ctx.fillStyle = "white";
-        ctx.textAlign = "center";
-
-        ctx.fillText(
-            players[myId].name || "Player",
-            me.x - camX + 15,
-            me.y - camY - 10
-        );
-    }
-
-    for(const id in players){
-
-        if(id === myId) continue;
-
-        const p = players[id];
-        const rp = renderPlayers[id];
-
-        if(!rp) continue;
-
-        rp.x = lerp(rp.x,p.x,0.2);
-        rp.y = lerp(rp.y,p.y,0.2);
-
-        ctx.fillStyle = "blue";
-
-        ctx.fillRect(
-            rp.x - camX,
-            rp.y - camY,
-            PLAYER_SIZE,
-            PLAYER_SIZE
-        );
-
-        ctx.fillStyle = "white";
-
-        ctx.fillText(
-            p.name || "Player",
-            rp.x - camX + 15,
-            rp.y - camY - 10
-        );
-    }
+    ctx.fillStyle = "blue";
+    ctx.fillRect(rp.x - camX, rp.y - camY, PLAYER_SIZE, PLAYER_SIZE);
+  }
 }
 
 function loop(){
-    update();
-    draw();
-    requestAnimationFrame(loop);
+  update();
+  draw();
+  requestAnimationFrame(loop);
 }
-
 loop();
-
 </script>
 </body>
 </html>

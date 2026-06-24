@@ -17,8 +17,8 @@ const players = {};
 io.on("connection", (socket) => {
 
     players[socket.id] = {
-        x: 1500,
-        y: 1500,
+        x: 700,
+        y: 450,
         name: "Player"
     };
 

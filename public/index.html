@@ -3,36 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Multiplayer</title>
+<title>Multiplayer Shooter</title>
 
 <style>
-body{
-    margin:0;
-    overflow:hidden;
-    font-family:Arial,sans-serif;
-}
-canvas{
-    display:block;
-}
-#ui{
-    position:absolute;
-    top:10px;
-    left:10px;
-    z-index:10;
-}
-#nameInput{
-    padding:8px;
-}
-#saveBtn{
-    padding:8px 12px;
-}
+body{margin:0;overflow:hidden;font-family:Arial;}
+canvas{display:block;}
+#ui{position:absolute;top:10px;left:10px;z-index:10;}
+#nameInput,#saveBtn{padding:8px;}
 </style>
 </head>
 <body>
 
 <div id="ui">
-    <input id="nameInput" maxlength="12" placeholder="Dit navn">
-    <button id="saveBtn">Gem navn</button>
+<input id="nameInput" maxlength="12" placeholder="Dit navn">
+<button id="saveBtn">Gem navn</button>
 </div>
 
 <canvas id="game"></canvas>
@@ -41,12 +25,12 @@ canvas{
 <script>
 
 const socket = io();
-
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-let myId = null;
+let myId;
 let players = {};
+let bullets = {};
 let renderPlayers = {};
 
 const MAP_WIDTH = 1400;
@@ -55,7 +39,16 @@ const MAP_HEIGHT = 900;
 const PLAYER_SIZE = 30;
 const SPEED = 2.6;
 
-// r = rotation i grader
+const me = { x:700, y:450 };
+
+let camX = 0, camY = 0;
+
+const keys = {};
+let mouseX = 0, mouseY = 0;
+
+let ammo = 12;
+let reloading = false;
+
 const walls = [
     {x:120,y:120,w:220,h:40,r:20},
     {x:450,y:90,w:180,h:40,r:-25},
@@ -71,330 +64,130 @@ const walls = [
     {x:730,y:350,w:170,h:40,r:-40}
 ];
 
-const me = { x:700, y:450 };
-
-let camX = 0;
-let camY = 0;
-
-const keys = {};
-let lastSend = 0;
-
-function lerp(a,b,t){
-    return a + (b-a)*t;
-}
-
-function resize(){
-    canvas.width = innerWidth;
-    canvas.height = innerHeight;
-}
-resize();
-window.addEventListener("resize", resize);
+function lerp(a,b,t){ return a+(b-a)*t; }
 
 socket.on("id", id => myId = id);
 
 socket.on("state", data => {
+    players = data.players;
+    bullets = data.bullets;
 
-    players = data;
-
-    for(const id in players){
-        if(!renderPlayers[id]){
-            renderPlayers[id] = {
-                x: players[id].x,
-                y: players[id].y
-            };
-        }
-    }
-
-    if(myId){
-        if(!players[myId]) players[myId] = {};
+    if(players[myId]){
         players[myId].x = me.x;
         players[myId].y = me.y;
     }
 });
 
-document.getElementById("saveBtn").onclick = () => {
-    socket.emit(
-        "name",
-        document.getElementById("nameInput").value
-    );
-};
-
 document.addEventListener("keydown", e => {
+
     keys[e.key.toLowerCase()] = true;
+
+    if(e.key.toLowerCase() === "r") reload();
 });
 
 document.addEventListener("keyup", e => {
     keys[e.key.toLowerCase()] = false;
 });
 
-// --- RIGTIG ROTERET COLLISION ---
-function pointInRotatedRect(px, py, wall){
+document.addEventListener("mousemove", e => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+});
 
-    const cx = wall.x + wall.w/2;
-    const cy = wall.y + wall.h/2;
+document.addEventListener("mousedown", () => {
 
-    const rad = -wall.r * Math.PI / 180;
+    if(ammo <= 0 || reloading) return;
 
-    const dx = px - cx;
-    const dy = py - cy;
+    ammo--;
 
-    const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
-    const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
+    const cx = me.x - camX + PLAYER_SIZE/2;
+    const cy = me.y - camY + PLAYER_SIZE/2;
 
-    return (
-        localX > -wall.w/2 &&
-        localX <  wall.w/2 &&
-        localY > -wall.h/2 &&
-        localY <  wall.h/2
-    );
+    const angle = Math.atan2(mouseY - cy, mouseX - cx);
+
+    socket.emit("shoot", { angle });
+});
+
+function reload(){
+
+    if(reloading || ammo === 12) return;
+
+    reloading = true;
+
+    setTimeout(() => {
+        ammo = 12;
+        reloading = false;
+    }, 2000);
 }
 
-function playerHitsWall(x,y){
-
-    const points = [
-        [x,y],
-        [x+PLAYER_SIZE,y],
-        [x,y+PLAYER_SIZE],
-        [x+PLAYER_SIZE,y+PLAYER_SIZE]
-    ];
-
-    for(const wall of walls){
-
-        for(const p of points){
-
-            if(pointInRotatedRect(p[0],p[1],wall)){
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-function movePlayer(dx,dy){
-
-    const oldX = me.x;
-    const oldY = me.y;
+function move(dx,dy){
 
     me.x += dx;
-
-    if(playerHitsWall(me.x, me.y)){
-        me.x = oldX;
-    }
-
     me.y += dy;
 
-    if(playerHitsWall(me.x, me.y)){
-        me.y = oldY;
-    }
+    me.x = Math.max(0, Math.min(MAP_WIDTH-PLAYER_SIZE, me.x));
+    me.y = Math.max(0, Math.min(MAP_HEIGHT-PLAYER_SIZE, me.y));
 }
 
 function update(){
 
-    let moved = false;
+    if(keys["w"]) move(0,-SPEED);
+    if(keys["s"]) move(0,SPEED);
+    if(keys["a"]) move(-SPEED,0);
+    if(keys["d"]) move(SPEED,0);
 
-    if(keys["w"]){ movePlayer(0,-SPEED); moved = true; }
-    if(keys["s"]){ movePlayer(0, SPEED); moved = true; }
-    if(keys["a"]){ movePlayer(-SPEED,0); moved = true; }
-    if(keys["d"]){ movePlayer( SPEED,0); moved = true; }
+    socket.emit("move",{ x:me.x, y:me.y });
 
-    me.x = Math.max(
-        0,
-        Math.min(MAP_WIDTH - PLAYER_SIZE, me.x)
-    );
-
-    me.y = Math.max(
-        0,
-        Math.min(MAP_HEIGHT - PLAYER_SIZE, me.y)
-    );
-
-    if(
-        moved &&
-        Date.now() - lastSend > 50
-    ){
-
-        socket.emit("move",{
-            x: me.x,
-            y: me.y
-        });
-
-        lastSend = Date.now();
-    }
-
-    const targetCamX =
-        me.x - canvas.width/2 + PLAYER_SIZE/2;
-
-    const targetCamY =
-        me.y - canvas.height/2 + PLAYER_SIZE/2;
-
-    camX = lerp(camX,targetCamX,0.08);
-    camY = lerp(camY,targetCamY,0.08);
-}
-
-// græstekstur
-function drawGrass(){
-
-    ctx.fillStyle = "#57c76d";
-    ctx.fillRect(
-        -camX,
-        -camY,
-        MAP_WIDTH,
-        MAP_HEIGHT
-    );
-
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    ctx.lineWidth = 1;
-
-    for(let x=0;x<MAP_WIDTH;x+=24){
-
-        for(let y=0;y<MAP_HEIGHT;y+=24){
-
-            const px = x - camX;
-            const py = y - camY;
-
-            ctx.beginPath();
-            ctx.moveTo(px,py+3);
-            ctx.lineTo(px+1,py-3);
-            ctx.stroke();
-        }
-    }
-}
-
-function drawWall(wall){
-
-    ctx.save();
-
-    ctx.translate(
-        wall.x + wall.w/2 - camX,
-        wall.y + wall.h/2 - camY
-    );
-
-    ctx.rotate(
-        wall.r * Math.PI / 180
-    );
-
-    ctx.fillStyle = "#7f7f7f";
-
-    ctx.fillRect(
-        -wall.w/2,
-        -wall.h/2,
-        wall.w,
-        wall.h
-    );
-
-    // lille tekstur
-    ctx.fillStyle = "#9a9a9a";
-
-    for(let x=-wall.w/2; x<wall.w/2; x+=20){
-
-        ctx.fillRect(
-            x,
-            -wall.h/2,
-            3,
-            wall.h
-        );
-    }
-
-    ctx.strokeStyle = "#5a5a5a";
-    ctx.lineWidth = 2;
-
-    ctx.strokeRect(
-        -wall.w/2,
-        -wall.h/2,
-        wall.w,
-        wall.h
-    );
-
-    ctx.restore();
+    camX = lerp(camX, me.x - innerWidth/2, 0.08);
+    camY = lerp(camY, me.y - innerHeight/2, 0.08);
 }
 
 function draw(){
 
-    ctx.clearRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-    );
+    ctx.clearRect(0,0,innerWidth,innerHeight);
 
-    drawGrass();
+    ctx.fillStyle="#57c76d";
+    ctx.fillRect(-camX,-camY,MAP_WIDTH,MAP_HEIGHT);
 
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 4;
-
-    ctx.strokeRect(
-        -camX,
-        -camY,
-        MAP_WIDTH,
-        MAP_HEIGHT
-    );
-
-    for(const wall of walls){
-        drawWall(wall);
+    // walls
+    ctx.fillStyle="gray";
+    for(const w of walls){
+        ctx.fillRect(w.x-camX,w.y-camY,w.w,w.h);
     }
 
-    // mig selv
-    ctx.fillStyle = "red";
-
-    ctx.fillRect(
-        me.x - camX,
-        me.y - camY,
-        PLAYER_SIZE,
-        PLAYER_SIZE
-    );
-
-    if(players[myId]){
-
-        ctx.fillStyle = "white";
-        ctx.textAlign = "center";
-
-        ctx.fillText(
-            players[myId].name || "Player",
-            me.x - camX + 15,
-            me.y - camY - 10
-        );
+    // bullets
+    ctx.fillStyle="yellow";
+    for(const b of bullets){
+        ctx.beginPath();
+        ctx.arc(b.x-camX,b.y-camY,5,0,Math.PI*2);
+        ctx.fill();
     }
 
-    // andre spillere
+    // players
     for(const id in players){
 
-        if(id === myId) continue;
-
         const p = players[id];
-        const rp = renderPlayers[id];
 
-        if(!rp) continue;
+        ctx.fillStyle = id === myId ? "red" : "blue";
+        ctx.fillRect(p.x-camX,p.y-camY,PLAYER_SIZE,PLAYER_SIZE);
 
-        rp.x = lerp(rp.x,p.x,0.2);
-        rp.y = lerp(rp.y,p.y,0.2);
-
-        ctx.fillStyle = "blue";
-
-        ctx.fillRect(
-            rp.x - camX,
-            rp.y - camY,
-            PLAYER_SIZE,
-            PLAYER_SIZE
-        );
-
-        ctx.fillStyle = "white";
-
+        ctx.fillStyle="white";
         ctx.fillText(
-            p.name || "Player",
-            rp.x - camX + 15,
-            rp.y - camY - 10
+            `${p.name} HP:${p.hp}`,
+            p.x-camX,
+            p.y-camY-10
         );
     }
+
+    ctx.fillStyle="white";
+    ctx.fillText(`Ammo: ${ammo}${reloading ? " (RELOADING)" : ""}`, 20, 20);
 }
 
 function loop(){
-
     update();
     draw();
-
     requestAnimationFrame(loop);
 }
-
 loop();
 
 </script>

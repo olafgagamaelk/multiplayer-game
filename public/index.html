@@ -1,82 +1,62 @@
+<!DOCTYPE html>
+<html lang="da">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Multiplayer</title>
 
 <style>
-
 body{
     margin:0;
     overflow:hidden;
     font-family:Arial,sans-serif;
 }
-
 canvas{
     display:block;
 }
-
 #ui{
     position:absolute;
     top:10px;
     left:10px;
     z-index:10;
 }
-
 #nameInput{
     padding:8px;
-    font-size:16px;
 }
-
 #saveBtn{
     padding:8px 12px;
-    font-size:16px;
 }
-
 </style>
 </head>
 <body>
-@@ -47,7 +38,6 @@
+
+<div id="ui">
+    <input id="nameInput" maxlength="12" placeholder="Dit navn">
+    <button id="saveBtn">Gem navn</button>
+</div>
+
 <canvas id="game"></canvas>
 
 <script src="/socket.io/socket.io.js"></script>
-
 <script>
 
 const socket = io();
-@@ -56,7 +46,6 @@
+
+const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 let myId = null;
-
 let players = {};
 let renderPlayers = {};
 
-@@ -66,40 +55,30 @@
+const MAP_WIDTH = 1400;
+const MAP_HEIGHT = 900;
+
 const PLAYER_SIZE = 30;
 const SPEED = 2.6;
 
 // r = rotation i grader
 const walls = [
-
-{x:100,y:100,w:250,h:40},
-{x:450,y:120,w:200,h:40},
-{x:850,y:90,w:250,h:40},
-
-{x:150,y:300,w:40,h:220},
-{x:400,y:250,w:300,h:40},
-{x:800,y:300,w:40,h:250},
-
-{x:1050,y:200,w:40,h:220},
-{x:1150,y:450,w:180,h:40},
-
-{x:250,y:650,w:250,h:40},
-{x:600,y:550,w:40,h:220},
-{x:800,y:650,w:250,h:40},
-
-{x:1050,y:700,w:200,h:40},
-{x:1250,y:200,w:40,h:400}
-
     {x:120,y:120,w:220,h:40,r:20},
     {x:450,y:90,w:180,h:40,r:-25},
     {x:850,y:130,w:240,h:40,r:15},
@@ -91,14 +71,6 @@ const walls = [
     {x:730,y:350,w:170,h:40,r:-40}
 ];
 
-const me = {
-    x:700,
-    y:450
-};
-
-const keys = {};
-
-let lastSend = 0;
 const me = { x:700, y:450 };
 
 let camX = 0;
@@ -110,17 +82,14 @@ let lastSend = 0;
 function lerp(a,b,t){
     return a + (b-a)*t;
 }
-@@ -108,42 +87,32 @@
+
+function resize(){
     canvas.width = innerWidth;
     canvas.height = innerHeight;
 }
-
 resize();
 window.addEventListener("resize", resize);
 
-socket.on("id", id => {
-    myId = id;
-});
 socket.on("id", id => myId = id);
 
 socket.on("state", data => {
@@ -128,12 +97,8 @@ socket.on("state", data => {
     players = data;
 
     for(const id in players){
-
         if(!renderPlayers[id]){
-
             renderPlayers[id] = {
-                x:players[id].x,
-                y:players[id].y
                 x: players[id].x,
                 y: players[id].y
             };
@@ -141,11 +106,6 @@ socket.on("state", data => {
     }
 
     if(myId){
-
-        if(!players[myId]){
-            players[myId] = {};
-        }
-
         if(!players[myId]) players[myId] = {};
         players[myId].x = me.x;
         players[myId].y = me.y;
@@ -153,15 +113,20 @@ socket.on("state", data => {
 });
 
 document.getElementById("saveBtn").onclick = () => {
-
     socket.emit(
         "name",
         document.getElementById("nameInput").value
-@@ -158,81 +127,76 @@
+    );
+};
+
+document.addEventListener("keydown", e => {
+    keys[e.key.toLowerCase()] = true;
+});
+
+document.addEventListener("keyup", e => {
     keys[e.key.toLowerCase()] = false;
 });
 
-function rectCollision(a,b){
 // --- RIGTIG ROTERET COLLISION ---
 function pointInRotatedRect(px, py, wall){
 
@@ -177,10 +142,6 @@ function pointInRotatedRect(px, py, wall){
     const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
 
     return (
-        a.x < b.x + b.w &&
-        a.x + a.w > b.x &&
-        a.y < b.y + b.h &&
-        a.y + a.h > b.y
         localX > -wall.w/2 &&
         localX <  wall.w/2 &&
         localY > -wall.h/2 &&
@@ -217,40 +178,12 @@ function movePlayer(dx,dy){
 
     me.x += dx;
 
-    for(const wall of walls){
-
-        if(rectCollision(
-            {
-                x:me.x,
-                y:me.y,
-                w:PLAYER_SIZE,
-                h:PLAYER_SIZE
-            },
-            wall
-        )){
-            me.x = oldX;
-            break;
-        }
     if(playerHitsWall(me.x, me.y)){
         me.x = oldX;
     }
 
     me.y += dy;
 
-    for(const wall of walls){
-
-        if(rectCollision(
-            {
-                x:me.x,
-                y:me.y,
-                w:PLAYER_SIZE,
-                h:PLAYER_SIZE
-            },
-            wall
-        )){
-            me.y = oldY;
-            break;
-        }
     if(playerHitsWall(me.x, me.y)){
         me.y = oldY;
     }
@@ -260,25 +193,6 @@ function update(){
 
     let moved = false;
 
-    if(keys["w"]){
-        movePlayer(0,-SPEED);
-        moved = true;
-    }
-
-    if(keys["s"]){
-        movePlayer(0,SPEED);
-        moved = true;
-    }
-
-    if(keys["a"]){
-        movePlayer(-SPEED,0);
-        moved = true;
-    }
-
-    if(keys["d"]){
-        movePlayer(SPEED,0);
-        moved = true;
-    }
     if(keys["w"]){ movePlayer(0,-SPEED); moved = true; }
     if(keys["s"]){ movePlayer(0, SPEED); moved = true; }
     if(keys["a"]){ movePlayer(-SPEED,0); moved = true; }
@@ -286,12 +200,20 @@ function update(){
 
     me.x = Math.max(
         0,
-@@ -250,91 +214,98 @@
+        Math.min(MAP_WIDTH - PLAYER_SIZE, me.x)
+    );
+
+    me.y = Math.max(
+        0,
+        Math.min(MAP_HEIGHT - PLAYER_SIZE, me.y)
+    );
+
+    if(
+        moved &&
+        Date.now() - lastSend > 50
     ){
 
         socket.emit("move",{
-            x:me.x,
-            y:me.y
             x: me.x,
             y: me.y
         });
@@ -300,11 +222,9 @@ function update(){
     }
 
     const targetCamX =
-        me.x - canvas.width / 2 + PLAYER_SIZE / 2;
         me.x - canvas.width/2 + PLAYER_SIZE/2;
 
     const targetCamY =
-        me.y - canvas.height / 2 + PLAYER_SIZE / 2;
         me.y - canvas.height/2 + PLAYER_SIZE/2;
 
     camX = lerp(camX,targetCamX,0.08);
@@ -315,7 +235,6 @@ function update(){
 function drawGrass(){
 
     ctx.fillStyle = "#57c76d";
-
     ctx.fillRect(
         -camX,
         -camY,
@@ -323,27 +242,17 @@ function drawGrass(){
         MAP_HEIGHT
     );
 
-    ctx.strokeStyle =
-        "rgba(255,255,255,0.08)";
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
     ctx.lineWidth = 1;
 
-    ctx.lineWidth = 2;
     for(let x=0;x<MAP_WIDTH;x+=24){
 
-    for(let x=0;x<MAP_WIDTH;x+=25){
-
-        for(let y=0;y<MAP_HEIGHT;y+=25){
         for(let y=0;y<MAP_HEIGHT;y+=24){
 
             const px = x - camX;
             const py = y - camY;
 
             ctx.beginPath();
-
-            ctx.moveTo(px,py+4);
-            ctx.lineTo(px+2,py-4);
-
             ctx.moveTo(px,py+3);
             ctx.lineTo(px+1,py-3);
             ctx.stroke();
@@ -353,7 +262,6 @@ function drawGrass(){
 
 function drawWall(wall){
 
-    ctx.fillStyle = "#7d7d7d";
     ctx.save();
 
     ctx.translate(
@@ -368,28 +276,18 @@ function drawWall(wall){
     ctx.fillStyle = "#7f7f7f";
 
     ctx.fillRect(
-        wall.x - camX,
-        wall.y - camY,
         -wall.w/2,
         -wall.h/2,
         wall.w,
         wall.h
     );
 
-    ctx.fillStyle = "#999";
     // lille tekstur
     ctx.fillStyle = "#9a9a9a";
 
-    for(
-        let x=wall.x;
-        x<wall.x+wall.w;
-        x+=25
-    ){
     for(let x=-wall.w/2; x<wall.w/2; x+=20){
 
         ctx.fillRect(
-            x - camX,
-            wall.y - camY,
             x,
             -wall.h/2,
             3,
@@ -397,13 +295,10 @@ function drawWall(wall){
         );
     }
 
-    ctx.strokeStyle = "#555";
     ctx.strokeStyle = "#5a5a5a";
     ctx.lineWidth = 2;
 
     ctx.strokeRect(
-        wall.x - camX,
-        wall.y - camY,
         -wall.w/2,
         -wall.h/2,
         wall.w,
@@ -414,7 +309,27 @@ function drawWall(wall){
 }
 
 function draw(){
-@@ -362,6 +333,7 @@
+
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    drawGrass();
+
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 4;
+
+    ctx.strokeRect(
+        -camX,
+        -camY,
+        MAP_WIDTH,
+        MAP_HEIGHT
+    );
+
+    for(const wall of walls){
         drawWall(wall);
     }
 
@@ -422,15 +337,21 @@ function draw(){
     ctx.fillStyle = "red";
 
     ctx.fillRect(
-@@ -374,7 +346,6 @@
+        me.x - camX,
+        me.y - camY,
+        PLAYER_SIZE,
+        PLAYER_SIZE
+    );
+
     if(players[myId]){
 
         ctx.fillStyle = "white";
-        ctx.font = "16px Arial";
         ctx.textAlign = "center";
 
         ctx.fillText(
-@@ -384,6 +355,7 @@
+            players[myId].name || "Player",
+            me.x - camX + 15,
+            me.y - camY - 10
         );
     }
 
@@ -438,19 +359,44 @@ function draw(){
     for(const id in players){
 
         if(id === myId) continue;
-@@ -406,8 +378,6 @@
+
+        const p = players[id];
+        const rp = renderPlayers[id];
+
+        if(!rp) continue;
+
+        rp.x = lerp(rp.x,p.x,0.2);
+        rp.y = lerp(rp.y,p.y,0.2);
+
+        ctx.fillStyle = "blue";
+
+        ctx.fillRect(
+            rp.x - camX,
+            rp.y - camY,
+            PLAYER_SIZE,
+            PLAYER_SIZE
         );
 
         ctx.fillStyle = "white";
-        ctx.font = "16px Arial";
-        ctx.textAlign = "center";
 
         ctx.fillText(
             p.name || "Player",
-@@ -428,6 +398,5 @@
+            rp.x - camX + 15,
+            rp.y - camY - 10
+        );
+    }
+}
+
+function loop(){
+
+    update();
+    draw();
+
+    requestAnimationFrame(loop);
+}
+
 loop();
 
 </script>
-
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Multiplayer Shooter</title>
+<title>Multiplayer</title>
 
 <style>
 body{margin:0;overflow:hidden;font-family:Arial;}
@@ -25,29 +25,30 @@ canvas{display:block;}
 <script>
 
 const socket = io();
+
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-let myId;
-let players = {};
-let bullets = {};
-let renderPlayers = {};
+let myId=null;
+let players={};
+let bullets=[];
+let renderPlayers={};
 
-const MAP_WIDTH = 1400;
-const MAP_HEIGHT = 900;
+const MAP_WIDTH=1400;
+const MAP_HEIGHT=900;
+const PLAYER_SIZE=30;
+const SPEED=2.6;
 
-const PLAYER_SIZE = 30;
-const SPEED = 2.6;
+const me={x:700,y:450};
 
-const me = { x:700, y:450 };
+let camX=0,camY=0;
 
-let camX = 0, camY = 0;
+const keys={};
+let lastSend=0;
 
-const keys = {};
-let mouseX = 0, mouseY = 0;
+let mouseX=0,mouseY=0;
 
-let ammo = 12;
-let reloading = false;
+function lerp(a,b,t){return a+(b-a)*t;}
 
 const walls = [
     {x:120,y:120,w:220,h:40,r:20},
@@ -64,123 +65,108 @@ const walls = [
     {x:730,y:350,w:170,h:40,r:-40}
 ];
 
-function lerp(a,b,t){ return a+(b-a)*t; }
+function resize(){
+    canvas.width=innerWidth;
+    canvas.height=innerHeight;
+}
+resize();
+window.addEventListener("resize",resize);
 
-socket.on("id", id => myId = id);
+socket.on("id",id=>myId=id);
 
-socket.on("state", data => {
-    players = data.players;
-    bullets = data.bullets;
+socket.on("state",data=>{
+    players=data.players;
+    bullets=data.bullets;
 
-    if(players[myId]){
-        players[myId].x = me.x;
-        players[myId].y = me.y;
+    if(myId){
+        if(!players[myId]) players[myId]={};
+        players[myId].x=me.x;
+        players[myId].y=me.y;
     }
 });
 
-document.addEventListener("keydown", e => {
+document.getElementById("saveBtn").onclick=()=>{
+    socket.emit("name",document.getElementById("nameInput").value);
+};
 
-    keys[e.key.toLowerCase()] = true;
+document.addEventListener("keydown",e=>keys[e.key.toLowerCase()]=true);
+document.addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
 
-    if(e.key.toLowerCase() === "r") reload();
+document.addEventListener("mousemove",e=>{
+    mouseX=e.clientX;
+    mouseY=e.clientY;
 });
 
-document.addEventListener("keyup", e => {
-    keys[e.key.toLowerCase()] = false;
+document.addEventListener("mousedown",()=>{
+    const cx=me.x-camX+PLAYER_SIZE/2;
+    const cy=me.y-camY+PLAYER_SIZE/2;
+
+    const angle=Math.atan2(mouseY-cy,mouseX-cx);
+
+    socket.emit("shoot",{angle});
 });
 
-document.addEventListener("mousemove", e => {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
+document.addEventListener("keydown",(e)=>{
+    if(e.key==="r") socket.emit("reload");
 });
-
-document.addEventListener("mousedown", () => {
-
-    if(ammo <= 0 || reloading) return;
-
-    ammo--;
-
-    const cx = me.x - camX + PLAYER_SIZE/2;
-    const cy = me.y - camY + PLAYER_SIZE/2;
-
-    const angle = Math.atan2(mouseY - cy, mouseX - cx);
-
-    socket.emit("shoot", { angle });
-});
-
-function reload(){
-
-    if(reloading || ammo === 12) return;
-
-    reloading = true;
-
-    setTimeout(() => {
-        ammo = 12;
-        reloading = false;
-    }, 2000);
-}
 
 function move(dx,dy){
-
-    me.x += dx;
-    me.y += dy;
-
-    me.x = Math.max(0, Math.min(MAP_WIDTH-PLAYER_SIZE, me.x));
-    me.y = Math.max(0, Math.min(MAP_HEIGHT-PLAYER_SIZE, me.y));
+    const ox=me.x,oy=me.y;
+    me.x+=dx;
+    me.y+=dy;
 }
 
 function update(){
 
-    if(keys["w"]) move(0,-SPEED);
-    if(keys["s"]) move(0,SPEED);
-    if(keys["a"]) move(-SPEED,0);
-    if(keys["d"]) move(SPEED,0);
+    let moved=false;
 
-    socket.emit("move",{ x:me.x, y:me.y });
+    if(keys["w"]){move(0,-SPEED);moved=true;}
+    if(keys["s"]){move(0,SPEED);moved=true;}
+    if(keys["a"]){move(-SPEED,0);moved=true;}
+    if(keys["d"]){move(SPEED,0);moved=true;}
 
-    camX = lerp(camX, me.x - innerWidth/2, 0.08);
-    camY = lerp(camY, me.y - innerHeight/2, 0.08);
+    if(moved && Date.now()-lastSend>50){
+        socket.emit("move",{x:me.x,y:me.y});
+        lastSend=Date.now();
+    }
+
+    camX=lerp(camX,me.x-canvas.width/2+15,0.08);
+    camY=lerp(camY,me.y-canvas.height/2+15,0.08);
 }
 
 function draw(){
 
-    ctx.clearRect(0,0,innerWidth,innerHeight);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
     ctx.fillStyle="#57c76d";
     ctx.fillRect(-camX,-camY,MAP_WIDTH,MAP_HEIGHT);
 
-    // walls
-    ctx.fillStyle="gray";
-    for(const w of walls){
-        ctx.fillRect(w.x-camX,w.y-camY,w.w,w.h);
+    ctx.fillStyle="red";
+    ctx.fillRect(me.x-camX,me.y-camY,PLAYER_SIZE,PLAYER_SIZE);
+
+    for(const id in players){
+        if(id===myId) continue;
+
+        const p=players[id];
+        const rp=renderPlayers[id]||p;
+        renderPlayers[id]=rp;
+
+        rp.x=lerp(rp.x,p.x,0.2);
+        rp.y=lerp(rp.y,p.y,0.2);
+
+        ctx.fillStyle="blue";
+        ctx.fillRect(rp.x-camX,rp.y-camY,PLAYER_SIZE,PLAYER_SIZE);
+
+        ctx.fillStyle="white";
+        ctx.fillText(`${p.name} HP:${p.hp} Ammo:${p.ammo}`,rp.x-camX,rp.y-camY-10);
     }
 
-    // bullets
     ctx.fillStyle="yellow";
     for(const b of bullets){
         ctx.beginPath();
         ctx.arc(b.x-camX,b.y-camY,5,0,Math.PI*2);
         ctx.fill();
     }
-
-    // players
-    for(const id in players){
-
-        const p = players[id];
-
-        ctx.fillStyle = id === myId ? "red" : "blue";
-        ctx.fillRect(p.x-camX,p.y-camY,PLAYER_SIZE,PLAYER_SIZE);
-
-        ctx.fillStyle="white";
-        ctx.fillText(
-            `${p.name} HP:${p.hp}`,
-            p.x-camX,
-            p.y-camY-10
-        );
-    }
-
-    ctx.fillStyle="white";
-    ctx.fillText(`Ammo: ${ammo}${reloading ? " (RELOADING)" : ""}`, 20, 20);
 }
 
 function loop(){

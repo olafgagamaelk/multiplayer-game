@@ -15,7 +15,7 @@ app.use(express.static("public"));
 const MAP_WIDTH = 1400;
 const MAP_HEIGHT = 900;
 const PLAYER_SIZE = 30;
-const BULLET_SPEED = 10;          // pr. server tick (50 ms)
+const BULLET_SPEED = 10;
 const BULLET_RADIUS = 4;
 const DAMAGE = 34;
 
@@ -38,18 +38,15 @@ const players = {};
 const bullets = [];
 let bulletId = 0;
 
-// ---------- hjælpefunktioner (roteret rektangel) ----------
+// ---------- hjælpefunktioner ----------
 function pointInRotatedRect(px, py, wall) {
     const cx = wall.x + wall.w / 2;
     const cy = wall.y + wall.h / 2;
     const rad = -wall.r * Math.PI / 180;
-
     const dx = px - cx;
     const dy = py - cy;
-
     const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
     const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
-
     return (
         localX > -wall.w / 2 &&
         localX <  wall.w / 2 &&
@@ -88,7 +85,8 @@ io.on("connection", (socket) => {
         x: 700,
         y: 450,
         name: "Player",
-        hp: 100
+        hp: 100,
+        aimAngle: 0           // gemmer sidste skud-vinkel
     };
 
     socket.emit("id", socket.id);
@@ -109,6 +107,9 @@ io.on("connection", (socket) => {
     socket.on("shoot", (angle) => {
         const p = players[socket.id];
         if (!p) return;
+        // Opdater sigtevinkel så andre kan se den
+        p.aimAngle = angle;
+
         const startX = p.x + PLAYER_SIZE / 2;
         const startY = p.y + PLAYER_SIZE / 2;
 
@@ -130,19 +131,18 @@ io.on("connection", (socket) => {
 // ---------- spil-opdatering hver 50. ms ----------
 setInterval(() => {
     const toRemove = new Set();
-    const hitEvents = [];  // samler hit-beskeder
+    const hitEvents = [];
 
     for (const b of bullets) {
         b.x += b.vx;
         b.y += b.vy;
 
-        // ude af banen?
         if (b.x < 0 || b.x > MAP_WIDTH || b.y < 0 || b.y > MAP_HEIGHT) {
             toRemove.add(b.id);
             continue;
         }
 
-        // ramt en væg?
+        // ramt væg?
         let hitWall = false;
         for (const wall of walls) {
             if (pointInRotatedRect(b.x, b.y, wall)) {
@@ -154,7 +154,7 @@ setInterval(() => {
         }
         if (hitWall) continue;
 
-        // ramt en spiller?
+        // ramt spiller?
         for (const id in players) {
             if (id === b.ownerId) continue;
             const p = players[id];
@@ -166,8 +166,6 @@ setInterval(() => {
                 p.hp -= DAMAGE;
                 toRemove.add(b.id);
                 hitEvents.push({ type: "player", x: b.x, y: b.y, targetId: id });
-
-                // Underret den ramte spiller (skades-besked)
                 io.to(id).emit("damaged", { amount: DAMAGE });
 
                 if (p.hp <= 0) {
@@ -181,19 +179,16 @@ setInterval(() => {
         }
     }
 
-    // Fjern markerede kugler
     for (let i = bullets.length - 1; i >= 0; i--) {
         if (toRemove.has(bullets[i].id)) {
             bullets.splice(i, 1);
         }
     }
 
-    // Send hit-events til alle (så alle kan se effekterne)
     if (hitEvents.length > 0) {
         io.emit("bulletHit", hitEvents);
     }
 
-    // Send fuld tilstand
     io.emit("state", {
         players: players,
         bullets: bullets

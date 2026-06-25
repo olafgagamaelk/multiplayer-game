@@ -285,10 +285,7 @@ socket.on("state", data => {
 
     for(const id in players){
         if(!renderPlayers[id]){
-            renderPlayers[id] = {
-                x: players[id].x,
-                y: players[id].y
-            };
+            renderPlayers[id] = { x: players[id].x, y: players[id].y };
         }
     }
 
@@ -690,51 +687,121 @@ function drawPlayerShadow(sx, sy){
     ctx.fill();
 }
 
-// --- VÅBENMODELLER (pegende mod højre ved 0°) ---
-function drawRevolver(){
-    ctx.fillStyle = "#3a3a3a"; ctx.fillRect(6, -2, 16, 4);
-    ctx.fillStyle = "#555"; ctx.fillRect(20, -1.5, 3, 3);
-    ctx.fillStyle = "#2a2a2a"; ctx.beginPath(); ctx.ellipse(2, 0, 7, 5, 0, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = "#555"; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(2, 0, 7, 5, 0, 0, Math.PI*2); ctx.stroke();
+// --- NY VÅBENMODELLER (geometri, altid korrekte) ---
+function drawRevolver(cx, cy, angle){
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    const perpX = -dirY; // vinkelret (til højre for retningen)
+    const perpY = dirX;
+
+    // Løb
+    ctx.fillStyle = "#3a3a3a";
+    ctx.beginPath();
+    ctx.moveTo(cx + dirX*6 - perpX*2, cy + dirY*6 - perpY*2);
+    ctx.lineTo(cx + dirX*22 - perpX*2, cy + dirY*22 - perpY*2);
+    ctx.lineTo(cx + dirX*22 + perpX*2, cy + dirY*22 + perpY*2);
+    ctx.lineTo(cx + dirX*6 + perpX*2, cy + dirY*6 + perpY*2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Tromle (ellipse vinkelret på retningen)
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.fillStyle = "#2a2a2a";
+    ctx.beginPath();
+    ctx.ellipse(2, 0, 7, 5, 0, 0, Math.PI*2);
+    ctx.fill();
+    // små huller
+    ctx.fillStyle = "#444";
     for(let i=0;i<6;i++){
         const a = i * Math.PI/3;
-        ctx.fillStyle = "#444"; ctx.beginPath();
+        ctx.beginPath();
         ctx.arc(2 + Math.cos(a)*4.5, Math.sin(a)*3.2, 1.2, 0, Math.PI*2);
         ctx.fill();
     }
-    ctx.fillStyle = "#5c3d2e"; ctx.beginPath(); ctx.moveTo(-4,2); ctx.lineTo(-10,14); ctx.lineTo(-6,16); ctx.lineTo(-1,5); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "#4a2e1d"; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.strokeStyle = "#333"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0,2); ctx.lineTo(4,10); ctx.lineTo(2,10); ctx.stroke();
+    ctx.restore();
+
+    // Grip (under bagenden)
+    const gripX = cx - dirX*4 + perpX*6;
+    const gripY = cy - dirY*4 + perpY*6;
+    ctx.fillStyle = "#5c3d2e";
+    ctx.beginPath();
+    ctx.moveTo(cx - dirX*3, cy - dirY*3);
+    ctx.lineTo(gripX - dirX*8, gripY - dirY*8);
+    ctx.lineTo(gripX - dirX*5 + perpX*3, gripY - dirY*5 + perpY*3);
+    ctx.lineTo(cx - dirX*1 + perpX*3, cy - dirY*1 + perpY*3);
+    ctx.closePath();
+    ctx.fill();
 }
 
-function drawShotgun(){
-    ctx.fillStyle = "#444"; ctx.fillRect(6, -3, 20, 2.5); ctx.fillRect(6, 0.5, 20, 2.5);
-    ctx.fillStyle = "#5a4320"; ctx.beginPath(); ctx.moveTo(-2,2); ctx.lineTo(-12,12); ctx.lineTo(-8,14); ctx.lineTo(0,5); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#5c3d2e"; ctx.beginPath(); ctx.moveTo(-2,-2); ctx.lineTo(-6,-14); ctx.lineTo(-3,-15); ctx.lineTo(1,-4); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "#222"; ctx.lineWidth = 1; ctx.stroke();
+function drawShotgun(cx, cy, angle){
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    const perpX = -dirY;
+    const perpY = dirX;
+
+    // To løb (over/under)
+    ctx.fillStyle = "#444";
+    ctx.fillRect(cx + dirX*6 - perpX*3, cy + dirY*6 - perpY*3, 20, 2.5);
+    ctx.fillRect(cx + dirX*6 - perpX*0.5, cy + dirY*6 - perpY*0.5, 20, 2.5);
+
+    // Grip (bagud, nedad)
+    const gripStartX = cx - dirX*2;
+    const gripStartY = cy - dirY*2;
+    ctx.fillStyle = "#5a4320";
+    ctx.beginPath();
+    ctx.moveTo(gripStartX + perpX*2, gripStartY + perpY*2);
+    ctx.lineTo(gripStartX - dirX*10 + perpX*2, gripStartY - dirY*10 + perpY*2);
+    ctx.lineTo(gripStartX - dirX*6 + perpX*5, gripStartY - dirY*6 + perpY*5);
+    ctx.lineTo(gripStartX + perpX*5, gripStartY + perpY*5);
+    ctx.closePath();
+    ctx.fill();
 }
 
-function drawSniper(){
-    ctx.fillStyle = "#2b2b2b"; ctx.fillRect(6, -2, 24, 4);
-    ctx.fillStyle = "#555"; ctx.fillRect(26, -1.5, 4, 3);
-    ctx.fillStyle = "#1a1a1a"; ctx.fillRect(10, -6, 14, 3);
-    ctx.fillStyle = "#4a3320"; ctx.beginPath(); ctx.moveTo(-4,2); ctx.lineTo(-16,14); ctx.lineTo(-12,16); ctx.lineTo(-2,5); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "#222"; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(-8,10); ctx.lineTo(-10,20); ctx.moveTo(-4,11); ctx.lineTo(-6,20); ctx.stroke();
+function drawSniper(cx, cy, angle){
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    const perpX = -dirY;
+    const perpY = dirX;
+
+    // Langt løb
+    ctx.fillStyle = "#2b2b2b";
+    ctx.beginPath();
+    ctx.moveTo(cx + dirX*6 - perpX*2, cy + dirY*6 - perpY*2);
+    ctx.lineTo(cx + dirX*26 - perpX*2, cy + dirY*26 - perpY*2);
+    ctx.lineTo(cx + dirX*26 + perpX*2, cy + dirY*26 + perpY*2);
+    ctx.lineTo(cx + dirX*6 + perpX*2, cy + dirY*6 + perpY*2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Kikkert (ovenpå)
+    ctx.fillStyle = "#1a1a1a";
+    ctx.beginPath();
+    ctx.moveTo(cx + dirX*10 - perpX*3, cy + dirY*10 - perpY*3);
+    ctx.lineTo(cx + dirX*22 - perpX*3, cy + dirY*22 - perpY*3);
+    ctx.lineTo(cx + dirX*22 - perpX*1, cy + dirY*22 - perpY*1);
+    ctx.lineTo(cx + dirX*10 - perpX*1, cy + dirY*10 - perpY*1);
+    ctx.closePath();
+    ctx.fill();
+
+    // Grip (bagud, nedad)
+    ctx.fillStyle = "#4a3320";
+    ctx.beginPath();
+    ctx.moveTo(cx - dirX*3 + perpX*3, cy - dirY*3 + perpY*3);
+    ctx.lineTo(cx - dirX*14 + perpX*3, cy - dirY*14 + perpY*3);
+    ctx.lineTo(cx - dirX*10 + perpX*7, cy - dirY*10 + perpY*7);
+    ctx.lineTo(cx + perpX*7, cy + perpY*7);
+    ctx.closePath();
+    ctx.fill();
 }
 
 function drawWeapon(weapon, cx, cy, angle){
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(angle);   // simpel rotation – altid korrekt op/ned
-
     switch(weapon){
-        case "revolver": drawRevolver(); break;
-        case "shotgun": drawShotgun(); break;
-        case "sniper": drawSniper(); break;
+        case "revolver": drawRevolver(cx, cy, angle); break;
+        case "shotgun": drawShotgun(cx, cy, angle); break;
+        case "sniper": drawSniper(cx, cy, angle); break;
     }
-
-    ctx.restore();
 }
 
 function drawVignette(){

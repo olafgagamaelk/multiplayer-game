@@ -114,37 +114,46 @@ const walls = [
     {x:730,y:350,w:170,h:40,r:-40}
 ];
 
-// Dekorationer (kun visuelle, ingen kollision)
+// Mange flere dekorationer (kun visuelle)
 const decorations = [
-    {x:200, y:200, type:"bush", size:14},
-    {x:800, y:300, type:"rock", size:10},
-    {x:1050, y:600, type:"bush", size:16},
-    {x:400, y:700, type:"rock", size:12},
-    {x:150, y:550, type:"bush", size:11},
-    {x:950, y:180, type:"rock", size:8},
-    {x:600, y:800, type:"bush", size:15},
-    {x:1300, y:400, type:"rock", size:9},
+    {x:200,y:200,type:"bush",size:14},
+    {x:800,y:300,type:"rock",size:10},
+    {x:1050,y:600,type:"bush",size:16},
+    {x:400,y:700,type:"rock",size:12},
+    {x:150,y:550,type:"bush",size:11},
+    {x:950,y:180,type:"rock",size:8},
+    {x:600,y:800,type:"bush",size:15},
+    {x:1300,y:400,type:"rock",size:9},
+    {x:50,y:80,type:"bush",size:10},
+    {x:700,y:100,type:"rock",size:7},
+    {x:1200,y:150,type:"bush",size:13},
+    {x:350,y:150,type:"rock",size:9},
+    {x:1100,y:750,type:"bush",size:12},
+    {x:80,y:400,type:"rock",size:11},
+    {x:550,y:850,type:"bush",size:14},
+    {x:1000,y:50,type:"rock",size:6},
+    {x:1300,y:850,type:"bush",size:10},
+    {x:20,y:700,type:"rock",size:8},
 ];
 
 const me = { x:700, y:450 };
 
 let camX = 0;
 let camY = 0;
-let recoilX = 0, recoilY = 0;   // kamera-recoil
-let shakeX = 0, shakeY = 0;     // skærmrysten
+let recoilX = 0, recoilY = 0;
+let shakeX = 0, shakeY = 0;
 
 const keys = {};
 let lastSend = 0;
 let lastShoot = 0;
 
-// --- Ammunition & reload ---
-let magazine = 6;               // nuværende skud
+// Ammunition & reload
+let magazine = 6;
 const MAX_AMMO = 6;
 let isReloading = false;
 let reloadStart = 0;
-const RELOAD_TIME = 1500;       // ms
+const RELOAD_TIME = 1500;
 
-// Partikler
 let particles = [];
 
 // ---------- hjælpefunktioner ----------
@@ -177,12 +186,10 @@ socket.on("state", data => {
         const serverMe = players[myId];
         const dx = serverMe.x - me.x;
         const dy = serverMe.y - me.y;
-        // Teleportér kun hvis vi er langt væk (respawn eller fejl)
         if(Math.sqrt(dx*dx+dy*dy) > 80){
             me.x = serverMe.x;
             me.y = serverMe.y;
         }
-        // Opdater vores server-data (hp, name, osv.) men behold vores lokale position
         players[myId].x = me.x;
         players[myId].y = me.y;
     }
@@ -191,7 +198,6 @@ socket.on("state", data => {
 socket.on("bulletHit", events => {
     for(const ev of events){
         if(ev.type === "player"){
-            // Rød splat
             for(let i=0;i<14;i++){
                 const angle = Math.random()*Math.PI*2;
                 const speed = 2+Math.random()*5;
@@ -206,7 +212,6 @@ socket.on("bulletHit", events => {
                 });
             }
         } else if(ev.type === "wall"){
-            // Gnister
             for(let i=0;i<8;i++){
                 const angle = Math.random()*Math.PI*2;
                 const speed = 1+Math.random()*4;
@@ -225,8 +230,11 @@ socket.on("bulletHit", events => {
 });
 
 socket.on("damaged", data => {
-    damageOverlay.style.background = "rgba(255,0,0,0.5)";
-    setTimeout(()=>{ damageOverlay.style.background = "rgba(255,0,0,0)"; }, 100);
+    damageOverlay.style.background = "rgba(255,0,0,0.6)";
+    setTimeout(()=>{ damageOverlay.style.background = "rgba(255,0,0,0)"; }, 150);
+    // Ryst skærmen kraftigt
+    shakeX = (Math.random()-0.5)*20;
+    shakeY = (Math.random()-0.5)*20;
 });
 
 // ---------- UI knapper ----------
@@ -237,7 +245,6 @@ document.getElementById("saveBtn").onclick = () => {
 // ---------- INPUT ----------
 document.addEventListener("keydown", e => {
     keys[e.key.toLowerCase()] = true;
-    // Reload
     if(e.key.toLowerCase() === "r" && !isReloading && magazine < MAX_AMMO){
         startReload();
     }
@@ -262,7 +269,6 @@ function updateAmmoDisplay(){
     ammoDisplay.textContent = `${magazine}/${MAX_AMMO}`;
 }
 
-// Opdater reload-bar hvert frame (kaldes i update)
 function updateReload(){
     if(isReloading){
         const elapsed = Date.now() - reloadStart;
@@ -276,12 +282,9 @@ function updateReload(){
 
 // ---------- SKYD ----------
 canvas.addEventListener("mousedown", e => {
-    if(Date.now() - lastShoot < 200) return;  // minimum interval
+    if(Date.now() - lastShoot < 200) return;
     if(isReloading) return;
-    if(magazine <= 0) {
-        // Klikker forgæves – kan starte reload manuelt
-        return;
-    }
+    if(magazine <= 0) return;
 
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -294,23 +297,20 @@ canvas.addEventListener("mousedown", e => {
 
     socket.emit("shoot", angle);
 
-    // Brug ammo
     magazine--;
     lastShoot = Date.now();
     updateAmmoDisplay();
 
-    // Recoil på kamera
+    // Kraftigere recoil
     recoilX -= Math.cos(angle) * 8;
     recoilY -= Math.sin(angle) * 8;
 
-    // Skærmrysten
-    shakeX = (Math.random()-0.5) * 12;
-    shakeY = (Math.random()-0.5) * 12;
+    // Mere markant skærmrysten
+    shakeX = (Math.random()-0.5)*16;
+    shakeY = (Math.random()-0.5)*16;
 
-    // Recoil på spiller (push back)
     me.x -= Math.cos(angle) * 3;
     me.y -= Math.sin(angle) * 3;
-    // Klip indenfor banen
     me.x = Math.max(0, Math.min(MAP_WIDTH - PLAYER_SIZE, me.x));
     me.y = Math.max(0, Math.min(MAP_HEIGHT - PLAYER_SIZE, me.y));
 
@@ -330,7 +330,6 @@ canvas.addEventListener("mousedown", e => {
         });
     }
 
-    // Automatisk reload når magasinet er tomt
     if(magazine <= 0 && !isReloading){
         startReload();
     }
@@ -399,7 +398,6 @@ function resolveCollisions() {
                 if (push) {
                     me.x += push.dx;
                     me.y += push.dy;
-                    // Opdatér alle hjørner
                     corners[0][0] = me.x; corners[0][1] = me.y;
                     corners[1][0] = me.x + PLAYER_SIZE; corners[1][1] = me.y;
                     corners[2][0] = me.x; corners[2][1] = me.y + PLAYER_SIZE;
@@ -431,22 +429,18 @@ function update(){
         lastSend = Date.now();
     }
 
-    // Udjævn recoil
     recoilX = lerp(recoilX, 0, 0.15);
     recoilY = lerp(recoilY, 0, 0.15);
-    // Udjævn screen shake
-    shakeX = lerp(shakeX, 0, 0.2);
-    shakeY = lerp(shakeY, 0, 0.2);
+    shakeX = lerp(shakeX, 0, 0.15);
+    shakeY = lerp(shakeY, 0, 0.15);
 
     const targetCamX = me.x - canvas.width/2 + PLAYER_SIZE/2 + recoilX + shakeX;
     const targetCamY = me.y - canvas.height/2 + PLAYER_SIZE/2 + recoilY + shakeY;
     camX = lerp(camX, targetCamX, 0.08);
     camY = lerp(camY, targetCamY, 0.08);
 
-    // Reload status
     updateReload();
 
-    // Opdatér partikler
     for(let i=particles.length-1; i>=0; i--){
         const p = particles[i];
         p.x += p.vx;
@@ -458,17 +452,14 @@ function update(){
 
 // ---------- TEGNEFUNKTIONER ----------
 function drawGrass(){
-    // Basis græs
     ctx.fillStyle = "#5a9e4b";
     ctx.fillRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
 
-    // Subtil stribet tekstur
     ctx.fillStyle = "#4f8e42";
     for(let y=-camY; y<MAP_HEIGHT-camY; y+=16){
         ctx.fillRect(-camX, y, MAP_WIDTH, 2);
     }
 
-    // Små græsstrå
     ctx.strokeStyle = "#3d7030";
     ctx.lineWidth = 1;
     for(let x=-camX; x<MAP_WIDTH-camX; x+=18){
@@ -481,8 +472,8 @@ function drawGrass(){
     }
 }
 
+// --- Vægge: fast murstensmønster (ingen tilfældig flimren) ---
 function drawWallShadow(wall){
-    // Drop shadow
     ctx.save();
     ctx.translate(wall.x + wall.w/2 - camX + 4, wall.y + wall.h/2 - camY + 4);
     ctx.rotate(wall.r * Math.PI / 180);
@@ -496,29 +487,30 @@ function drawWall(wall){
     ctx.translate(wall.x + wall.w/2 - camX, wall.y + wall.h/2 - camY);
     ctx.rotate(wall.r * Math.PI / 180);
 
-    // Baggrund
+    // Grundfarve
     ctx.fillStyle = "#8a8a8a";
     ctx.fillRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
 
-    // Stenmønster – små mørkere rektangler
+    // Fast stenmønster (baseret på position, ikke tilfældigt hver frame)
     ctx.fillStyle = "#6e6e6e";
     const brickW = 16, brickH = 10;
-    for(let bx=-wall.w/2; bx<wall.w/2; bx+=brickW+3){
-        for(let by=-wall.h/2; by<wall.h/2; by+=brickH+2){
-            const w = brickW * (0.6 + Math.random()*0.4);
-            const h = brickH * (0.6 + Math.random()*0.4);
+    const seed = wall.x * 31 + wall.y * 17;
+    for(let bx = -wall.w/2; bx < wall.w/2; bx += brickW + 3){
+        for(let by = -wall.h/2; by < wall.h/2; by += brickH + 2){
+            // Simpel deterministisk variation
+            const w = brickW * (0.6 + ((bx*7 + by*13 + seed) % 10) / 25);
+            const h = brickH * (0.6 + ((bx*3 + by*11 + seed) % 10) / 25);
             ctx.fillRect(bx, by, w, h);
         }
     }
 
-    // Kantlinje
     ctx.strokeStyle = "#505050";
     ctx.lineWidth = 2;
     ctx.strokeRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
-
     ctx.restore();
 }
 
+// --- Buske & sten med fast mønster ---
 function drawDecorations(){
     for(const d of decorations){
         const sx = d.x - camX;
@@ -534,22 +526,26 @@ function drawDecorations(){
         }
         ctx.fill();
 
-        // Selve objektet
         if(d.type === "bush"){
             ctx.fillStyle = "#3b5e1f";
             ctx.beginPath();
             ctx.arc(sx, sy, d.size, 0, Math.PI*2);
             ctx.fill();
-            // lysere prikker
+
+            // Faste prikker (ikke tilfældige)
             ctx.fillStyle = "#4b7029";
+            const seed = d.x * 37 + d.y * 13;
             for(let i=0;i<5;i++){
-                const ax = sx - d.size/2 + Math.random()*d.size;
-                const ay = sy - d.size/2 + Math.random()*d.size;
+                const angle = ((seed + i*71) % 360) * Math.PI/180;
+                const dist = ((seed + i*47) % 100) / 100 * d.size * 0.7;
+                const ax = sx + Math.cos(angle)*dist;
+                const ay = sy + Math.sin(angle)*dist;
                 ctx.beginPath();
                 ctx.arc(ax, ay, d.size/5, 0, Math.PI*2);
                 ctx.fill();
             }
-        } else { // rock
+        } else {
+            // Sten
             ctx.fillStyle = "#6b6b6b";
             ctx.fillRect(sx-d.size/2, sy-d.size/2, d.size, d.size);
             ctx.fillStyle = "#545454";
@@ -582,19 +578,61 @@ function drawPlayerShadow(sx, sy){
     ctx.fill();
 }
 
-function drawAimLine(sx, sy, angle){
-    // Tegn en lille linje fra centrum i retning af aimAngle
-    const centerX = sx + PLAYER_SIZE/2;
-    const centerY = sy + PLAYER_SIZE/2;
-    const len = 14;
-    const endX = centerX + Math.cos(angle)*len;
-    const endY = centerY + Math.sin(angle)*len;
-    ctx.strokeStyle = "#ff0";
+// --- Revolver model (erstatter den gule linje) ---
+function drawRevolver(centerX, centerY, angle){
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate(angle);
+
+    // Løb
+    ctx.fillStyle = "#3a3a3a";
+    ctx.fillRect(6, -2, 16, 4);
+    // Løbets munding (lysere)
+    ctx.fillStyle = "#555";
+    ctx.fillRect(20, -1.5, 3, 3);
+
+    // Tromle
+    ctx.fillStyle = "#2a2a2a";
+    ctx.beginPath();
+    ctx.ellipse(2, 0, 7, 5, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Tromle detaljer
+    ctx.strokeStyle = "#555";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(2, 0, 7, 5, 0, 0, Math.PI*2);
+    ctx.stroke();
+    for(let i=0;i<6;i++){
+        const a = i * Math.PI/3;
+        ctx.fillStyle = "#444";
+        ctx.beginPath();
+        ctx.arc(2 + Math.cos(a)*4.5, Math.sin(a)*3.2, 1.2, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    // Skaft/greb
+    ctx.fillStyle = "#5c3d2e";
+    ctx.beginPath();
+    ctx.moveTo(-4, 2);
+    ctx.lineTo(-10, 14);
+    ctx.lineTo(-6, 16);
+    ctx.lineTo(-1, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#4a2e1d";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Aftrækkerbeskytter
+    ctx.strokeStyle = "#333";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(centerX, centerY);
-    ctx.lineTo(endX, endY);
+    ctx.moveTo(0, 2);
+    ctx.lineTo(4, 10);
+    ctx.lineTo(2, 10);
     ctx.stroke();
+
+    ctx.restore();
 }
 
 function drawVignette(){
@@ -608,31 +646,28 @@ function drawVignette(){
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+// ---------- HOVEDTEGNING ----------
 function draw(){
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     drawGrass();
     drawDecorations();
 
-    // Skygger for vægge
     for(const wall of walls) drawWallShadow(wall);
 
-    // Banens ramme
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = 4;
     ctx.strokeRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
 
-    // Vægge
     for(const wall of walls) drawWall(wall);
 
-    // Kugler med skygge og glød
+    // Kugler
     for(const bullet of bullets){
-        // Skygge
         ctx.fillStyle = "rgba(0,0,0,0.4)";
         ctx.beginPath();
         ctx.arc(bullet.x - camX + 2, bullet.y - camY + 2, 5, 0, Math.PI*2);
         ctx.fill();
-        // Glød
+
         ctx.shadowColor = "orange";
         ctx.shadowBlur = 10;
         ctx.fillStyle = "#ffd700";
@@ -654,7 +689,7 @@ function draw(){
         ctx.globalAlpha = 1;
     }
 
-    // --- ANDRE SPILLERE (skygge, krop, navn, health, sigte) ---
+    // Andre spillere
     for(const id in players){
         if(id === myId) continue;
         const p = players[id];
@@ -669,13 +704,14 @@ function draw(){
 
         ctx.fillStyle = "#4a7ebb";
         ctx.fillRect(sx, sy, PLAYER_SIZE, PLAYER_SIZE);
-        // Lidt afrunding-effekt (mørkere kant)
         ctx.fillStyle = "rgba(0,0,0,0.25)";
         ctx.fillRect(sx+2, sy+2, PLAYER_SIZE-4, PLAYER_SIZE-4);
 
-        // Sigte-linje (hvis aimAngle findes)
+        // Revolver hvis sigtevinkel findes
         if(typeof p.aimAngle === "number"){
-            drawAimLine(sx, sy, p.aimAngle);
+            const cx = rp.x + PLAYER_SIZE/2;
+            const cy = rp.y + PLAYER_SIZE/2;
+            drawRevolver(cx - camX, cy - camY, p.aimAngle);
         }
 
         ctx.fillStyle = "#fff";
@@ -684,7 +720,7 @@ function draw(){
         drawHealthBar(p, sx, sy);
     }
 
-    // --- MIG SELV ---
+    // Mig selv
     const myScreenX = me.x - camX;
     const myScreenY = me.y - camY;
 
@@ -695,32 +731,27 @@ function draw(){
     ctx.fillStyle = "rgba(0,0,0,0.3)";
     ctx.fillRect(myScreenX+2, myScreenY+2, PLAYER_SIZE-4, PLAYER_SIZE-4);
 
-    // Mit sigte (peger mod musen)
-    const rect = canvas.getBoundingClientRect();
-    // musens position i canvas
-    const mouseX = keys._mouseX || 0; // vi opdaterer i mousemove
-    const mouseY = keys._mouseY || 0;
-    if(mouseX && mouseY){
-        const worldMX = mouseX + camX;
-        const worldMY = mouseY + camY;
+    // Min revolver (peger mod musen)
+    if(keys._mouseX && keys._mouseY){
+        const worldMX = keys._mouseX + camX;
+        const worldMY = keys._mouseY + camY;
         const centerX = me.x + PLAYER_SIZE/2;
         const centerY = me.y + PLAYER_SIZE/2;
         const aimAngle = Math.atan2(worldMY - centerY, worldMX - centerX);
-        drawAimLine(myScreenX, myScreenY, aimAngle);
+        drawRevolver(centerX - camX, centerY - camY, aimAngle);
     }
 
     if(players[myId]){
         ctx.fillStyle = "#fff";
         ctx.textAlign = "center";
-        ctx.fillText(players[myId].name || "Player", me.x - camX + 15, me.y - camY - 10);
+        ctx.fillText(players[myId].name || "Player", myScreenX + 15, myScreenY - 10);
         drawHealthBar(players[myId], myScreenX, myScreenY);
     }
 
-    // Vignette over alt
     drawVignette();
 }
 
-// Mus tracking for at vise sigte (opdateres konstant)
+// Mus tracking
 canvas.addEventListener("mousemove", e => {
     const rect = canvas.getBoundingClientRect();
     keys._mouseX = e.clientX - rect.left;

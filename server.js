@@ -18,10 +18,9 @@ const PLAYER_SIZE = 30;
 const BULLET_SPEED = 10;
 const BULLET_RADIUS = 4;
 
-// Våbenskader
 const WEAPON_DAMAGE = {
     revolver: 20,
-    shotgun: 17,   // pr. pellet
+    shotgun: 17,
     sniper: 50
 };
 
@@ -91,7 +90,8 @@ io.on("connection", (socket) => {
         name: "Player",
         hp: 100,
         aimAngle: 0,
-        weapon: "revolver"   // standardvåben
+        weapon: "revolver",
+        kills: 0
     };
 
     socket.emit("id", socket.id);
@@ -109,7 +109,6 @@ io.on("connection", (socket) => {
         p.name = String(name).trim().substring(0, 12) || "Player";
     });
 
-    // Våbenskift
     socket.on("changeWeapon", (weapon) => {
         const p = players[socket.id];
         if (!p) return;
@@ -132,7 +131,6 @@ io.on("connection", (socket) => {
         const damage = WEAPON_DAMAGE[weapon] || 20;
 
         if (weapon === "shotgun") {
-            // 3 pellets med spredning
             const spreadAngles = [-0.15, 0, 0.15];
             for (const spread of spreadAngles) {
                 const a = angle + spread;
@@ -147,7 +145,6 @@ io.on("connection", (socket) => {
                 });
             }
         } else {
-            // Revolver eller sniper
             bullets.push({
                 id: bulletId++,
                 x: centerX,
@@ -165,7 +162,6 @@ io.on("connection", (socket) => {
     });
 });
 
-// Spil-opdatering
 setInterval(() => {
     const toRemove = new Set();
     const hitEvents = [];
@@ -204,6 +200,17 @@ setInterval(() => {
                 io.to(id).emit("damaged", { amount: b.damage });
 
                 if (p.hp <= 0) {
+                    // Kill tæller
+                    if (b.ownerId && players[b.ownerId] && b.ownerId !== id) {
+                        players[b.ownerId].kills = (players[b.ownerId].kills || 0) + 1;
+                        // Send kill-feed
+                        io.emit("killFeed", {
+                            killer: players[b.ownerId].name,
+                            victim: p.name
+                        });
+                    }
+
+                    // Respawn
                     const spawn = getRandomSpawn();
                     p.x = spawn.x;
                     p.y = spawn.y;

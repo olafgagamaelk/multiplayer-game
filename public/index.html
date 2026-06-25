@@ -225,7 +225,7 @@ const weapons = {
     shotgun: {
         name: "Shotgun",
         magSize: 2,
-        reloadTime: 2000,    // 2 sekunder igen
+        reloadTime: 2000,
         shootCooldown: 800
     },
     sniper: {
@@ -256,7 +256,7 @@ window.addEventListener("resize", resize);
 // Våbenskift UI – kan ikke skifte under reload
 weaponBtns.forEach(btn => {
     btn.addEventListener("click", () => {
-        if (isReloading) return;   // 🔒 låst under reload
+        if (isReloading) return;
         const weapon = btn.dataset.weapon;
         if (weapon === currentWeapon) return;
         weaponBtns.forEach(b => b.classList.remove("active"));
@@ -690,8 +690,8 @@ function drawPlayerShadow(sx, sy){
     ctx.fill();
 }
 
-// --- VÅBENMODELLER (roterer korrekt) ---
-function drawRightRevolver(){
+// --- VÅBENMODELLER (pegende mod højre ved 0°) ---
+function drawRevolver(){
     ctx.fillStyle = "#3a3a3a"; ctx.fillRect(6, -2, 16, 4);
     ctx.fillStyle = "#555"; ctx.fillRect(20, -1.5, 3, 3);
     ctx.fillStyle = "#2a2a2a"; ctx.beginPath(); ctx.ellipse(2, 0, 7, 5, 0, 0, Math.PI*2); ctx.fill();
@@ -707,14 +707,14 @@ function drawRightRevolver(){
     ctx.strokeStyle = "#333"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0,2); ctx.lineTo(4,10); ctx.lineTo(2,10); ctx.stroke();
 }
 
-function drawRightShotgun(){
+function drawShotgun(){
     ctx.fillStyle = "#444"; ctx.fillRect(6, -3, 20, 2.5); ctx.fillRect(6, 0.5, 20, 2.5);
     ctx.fillStyle = "#5a4320"; ctx.beginPath(); ctx.moveTo(-2,2); ctx.lineTo(-12,12); ctx.lineTo(-8,14); ctx.lineTo(0,5); ctx.closePath(); ctx.fill();
     ctx.fillStyle = "#5c3d2e"; ctx.beginPath(); ctx.moveTo(-2,-2); ctx.lineTo(-6,-14); ctx.lineTo(-3,-15); ctx.lineTo(1,-4); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = "#222"; ctx.lineWidth = 1; ctx.stroke();
 }
 
-function drawRightSniper(){
+function drawSniper(){
     ctx.fillStyle = "#2b2b2b"; ctx.fillRect(6, -2, 24, 4);
     ctx.fillStyle = "#555"; ctx.fillRect(26, -1.5, 4, 3);
     ctx.fillStyle = "#1a1a1a"; ctx.fillRect(10, -6, 14, 3);
@@ -726,21 +726,12 @@ function drawRightSniper(){
 function drawWeapon(weapon, cx, cy, angle){
     ctx.save();
     ctx.translate(cx, cy);
+    ctx.rotate(angle);   // simpel rotation – altid korrekt op/ned
 
-    const pointingLeft = Math.cos(angle) < 0;
-    if (pointingLeft) {
-        // Vend mod venstre uden at flippe på hovedet
-        ctx.rotate(Math.PI - angle);
-        ctx.scale(-1, 1);
-    } else {
-        ctx.rotate(angle);
-    }
-
-    // Alle modeller er tegnet med mundingen mod højre
     switch(weapon){
-        case "revolver": drawRightRevolver(); break;
-        case "shotgun": drawRightShotgun(); break;
-        case "sniper": drawRightSniper(); break;
+        case "revolver": drawRevolver(); break;
+        case "shotgun": drawShotgun(); break;
+        case "sniper": drawSniper(); break;
     }
 
     ctx.restore();

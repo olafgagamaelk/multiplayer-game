@@ -27,7 +27,6 @@ canvas{
 #saveBtn{
     padding:8px 12px;
 }
-/* Skades-overlay */
 #damageOverlay{
     position:fixed;
     top:0; left:0;
@@ -36,6 +35,32 @@ canvas{
     background:rgba(255,0,0,0);
     transition: background 0.1s;
     z-index:20;
+}
+#hud{
+    position:fixed;
+    bottom:20px;
+    left:20px;
+    color:white;
+    font-size:20px;
+    font-weight:bold;
+    text-shadow:2px 2px 0 #000;
+    z-index:15;
+}
+#reloadBar{
+    position:fixed;
+    bottom:50px;
+    left:20px;
+    width:120px;
+    height:8px;
+    background:#333;
+    border:2px solid #fff;
+    display:none;
+    z-index:16;
+}
+#reloadFill{
+    height:100%;
+    background:#0f0;
+    width:0%;
 }
 </style>
 </head>
@@ -46,6 +71,10 @@ canvas{
     <button id="saveBtn">Gem navn</button>
 </div>
 <div id="damageOverlay"></div>
+<div id="hud">🔫 <span id="ammoDisplay">6/6</span></div>
+<div id="reloadBar">
+    <div id="reloadFill"></div>
+</div>
 <canvas id="game"></canvas>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -56,6 +85,9 @@ const socket = io();
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const damageOverlay = document.getElementById("damageOverlay");
+const ammoDisplay = document.getElementById("ammoDisplay");
+const reloadBar = document.getElementById("reloadBar");
+const reloadFill = document.getElementById("reloadFill");
 
 let myId = null;
 let players = {};
@@ -64,7 +96,6 @@ let bullets = [];
 
 const MAP_WIDTH = 1400;
 const MAP_HEIGHT = 900;
-
 const PLAYER_SIZE = 30;
 const SPEED = 2.6;
 
@@ -83,20 +114,40 @@ const walls = [
     {x:730,y:350,w:170,h:40,r:-40}
 ];
 
+// Dekorationer (kun visuelle, ingen kollision)
+const decorations = [
+    {x:200, y:200, type:"bush", size:14},
+    {x:800, y:300, type:"rock", size:10},
+    {x:1050, y:600, type:"bush", size:16},
+    {x:400, y:700, type:"rock", size:12},
+    {x:150, y:550, type:"bush", size:11},
+    {x:950, y:180, type:"rock", size:8},
+    {x:600, y:800, type:"bush", size:15},
+    {x:1300, y:400, type:"rock", size:9},
+];
+
 const me = { x:700, y:450 };
 
 let camX = 0;
 let camY = 0;
-let recoilX = 0, recoilY = 0;   // til recoil
+let recoilX = 0, recoilY = 0;   // kamera-recoil
+let shakeX = 0, shakeY = 0;     // skærmrysten
 
 const keys = {};
 let lastSend = 0;
 let lastShoot = 0;
 
-// Partikler (for hit-effekter)
+// --- Ammunition & reload ---
+let magazine = 6;               // nuværende skud
+const MAX_AMMO = 6;
+let isReloading = false;
+let reloadStart = 0;
+const RELOAD_TIME = 1500;       // ms
+
+// Partikler
 let particles = [];
 
-// ----- hjælpefunktioner -----
+// ---------- hjælpefunktioner ----------
 function lerp(a,b,t){ return a + (b-a)*t; }
 
 function resize(){
@@ -126,48 +177,47 @@ socket.on("state", data => {
         const serverMe = players[myId];
         const dx = serverMe.x - me.x;
         const dy = serverMe.y - me.y;
-        if(Math.sqrt(dx*dx+dy*dy) > 60){
+        // Teleportér kun hvis vi er langt væk (respawn eller fejl)
+        if(Math.sqrt(dx*dx+dy*dy) > 80){
             me.x = serverMe.x;
             me.y = serverMe.y;
         }
+        // Opdater vores server-data (hp, name, osv.) men behold vores lokale position
         players[myId].x = me.x;
         players[myId].y = me.y;
     }
 });
 
 socket.on("bulletHit", events => {
-    // Skab partikler for hvert hit
     for(const ev of events){
         if(ev.type === "player"){
-            // Splat – røde dråber
-            for(let i=0;i<12;i++){
+            // Rød splat
+            for(let i=0;i<14;i++){
                 const angle = Math.random()*Math.PI*2;
-                const speed = 2+Math.random()*4;
+                const speed = 2+Math.random()*5;
                 particles.push({
-                    x: ev.x,
-                    y: ev.y,
+                    x: ev.x, y: ev.y,
                     vx: Math.cos(angle)*speed,
                     vy: Math.sin(angle)*speed,
-                    life: 30+Math.random()*15,
-                    maxLife: 45,
+                    life: 30+Math.random()*20,
+                    maxLife: 50,
                     color: `hsl(${Math.random()*20+350}, 100%, 60%)`,
-                    size: 2+Math.random()*3
+                    size: 2+Math.random()*4
                 });
             }
         } else if(ev.type === "wall"){
-            // Gnister – gule/hvide
-            for(let i=0;i<6;i++){
+            // Gnister
+            for(let i=0;i<8;i++){
                 const angle = Math.random()*Math.PI*2;
-                const speed = 1+Math.random()*3;
+                const speed = 1+Math.random()*4;
                 particles.push({
-                    x: ev.x,
-                    y: ev.y,
+                    x: ev.x, y: ev.y,
                     vx: Math.cos(angle)*speed,
                     vy: Math.sin(angle)*speed,
                     life: 15+Math.random()*10,
                     maxLife: 25,
                     color: `hsl(${Math.random()*20+40}, 100%, ${60+Math.random()*40}%)`,
-                    size: 1.5+Math.random()*2
+                    size: 1.5+Math.random()*3
                 });
             }
         }
@@ -175,30 +225,67 @@ socket.on("bulletHit", events => {
 });
 
 socket.on("damaged", data => {
-    // Rød flash på skærmen
     damageOverlay.style.background = "rgba(255,0,0,0.5)";
-    setTimeout(()=>{
-        damageOverlay.style.background = "rgba(255,0,0,0)";
-    }, 100);
+    setTimeout(()=>{ damageOverlay.style.background = "rgba(255,0,0,0)"; }, 100);
 });
 
-// ---------- NAVN OG INPUT ----------
+// ---------- UI knapper ----------
 document.getElementById("saveBtn").onclick = () => {
     socket.emit("name", document.getElementById("nameInput").value);
 };
 
-document.addEventListener("keydown", e => { keys[e.key.toLowerCase()] = true; });
+// ---------- INPUT ----------
+document.addEventListener("keydown", e => {
+    keys[e.key.toLowerCase()] = true;
+    // Reload
+    if(e.key.toLowerCase() === "r" && !isReloading && magazine < MAX_AMMO){
+        startReload();
+    }
+});
 document.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+
+function startReload(){
+    isReloading = true;
+    reloadStart = Date.now();
+    reloadBar.style.display = "block";
+    reloadFill.style.width = "0%";
+}
+
+function finishReload(){
+    magazine = MAX_AMMO;
+    isReloading = false;
+    reloadBar.style.display = "none";
+    updateAmmoDisplay();
+}
+
+function updateAmmoDisplay(){
+    ammoDisplay.textContent = `${magazine}/${MAX_AMMO}`;
+}
+
+// Opdater reload-bar hvert frame (kaldes i update)
+function updateReload(){
+    if(isReloading){
+        const elapsed = Date.now() - reloadStart;
+        const progress = Math.min(elapsed / RELOAD_TIME, 1);
+        reloadFill.style.width = (progress*100)+"%";
+        if(elapsed >= RELOAD_TIME){
+            finishReload();
+        }
+    }
+}
 
 // ---------- SKYD ----------
 canvas.addEventListener("mousedown", e => {
-    if(Date.now() - lastShoot < 500) return;
-    lastShoot = Date.now();
+    if(Date.now() - lastShoot < 200) return;  // minimum interval
+    if(isReloading) return;
+    if(magazine <= 0) {
+        // Klikker forgæves – kan starte reload manuelt
+        return;
+    }
 
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-
     const worldMX = mouseX + camX;
     const worldMY = mouseY + camY;
     const centerX = me.x + PLAYER_SIZE/2;
@@ -207,25 +294,45 @@ canvas.addEventListener("mousedown", e => {
 
     socket.emit("shoot", angle);
 
-    // Recoil: ryk kameraet lidt i modsat retning af skuddet
-    recoilX -= Math.cos(angle) * 6;
-    recoilY -= Math.sin(angle) * 6;
+    // Brug ammo
+    magazine--;
+    lastShoot = Date.now();
+    updateAmmoDisplay();
 
-    // Mundingsglimt-partikler
-    const muzzleX = centerX + Math.cos(angle)*12;
-    const muzzleY = centerY + Math.sin(angle)*12;
-    for(let i=0;i<5;i++){
-        const spread = (Math.random()-0.5)*0.5;
+    // Recoil på kamera
+    recoilX -= Math.cos(angle) * 8;
+    recoilY -= Math.sin(angle) * 8;
+
+    // Skærmrysten
+    shakeX = (Math.random()-0.5) * 12;
+    shakeY = (Math.random()-0.5) * 12;
+
+    // Recoil på spiller (push back)
+    me.x -= Math.cos(angle) * 3;
+    me.y -= Math.sin(angle) * 3;
+    // Klip indenfor banen
+    me.x = Math.max(0, Math.min(MAP_WIDTH - PLAYER_SIZE, me.x));
+    me.y = Math.max(0, Math.min(MAP_HEIGHT - PLAYER_SIZE, me.y));
+
+    // Mundingsglimt
+    const muzzleX = centerX + Math.cos(angle)*14;
+    const muzzleY = centerY + Math.sin(angle)*14;
+    for(let i=0;i<6;i++){
+        const spread = (Math.random()-0.5)*0.6;
         particles.push({
-            x: muzzleX,
-            y: muzzleY,
-            vx: Math.cos(angle+spread)*3,
-            vy: Math.sin(angle+spread)*3,
+            x: muzzleX, y: muzzleY,
+            vx: Math.cos(angle+spread)*4,
+            vy: Math.sin(angle+spread)*4,
             life: 6,
             maxLife: 6,
             color: "orange",
-            size: 3+Math.random()*3
+            size: 3+Math.random()*4
         });
+    }
+
+    // Automatisk reload når magasinet er tomt
+    if(magazine <= 0 && !isReloading){
+        startReload();
     }
 });
 
@@ -246,43 +353,33 @@ function pointInRotatedRect(px, py, wall){
     );
 }
 
-// Returner {dx, dy} for at skubbe punktet ud af rektanglet
 function pushOutOfWall(px, py, wall) {
     const cx = wall.x + wall.w/2;
     const cy = wall.y + wall.h/2;
     const rad = -wall.r * Math.PI / 180;
-
-    // Transformer punkt til lokalt rum
     const dx = px - cx;
     const dy = py - cy;
     const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
     const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
-
     const halfW = wall.w/2;
     const halfH = wall.h/2;
 
-    // Hvis punktet allerede er udenfor, gør ingenting
     if (Math.abs(localX) <= halfW && Math.abs(localY) <= halfH) {
-        // Find den korteste afstand til en kant
-        const distLeft   = halfW + localX;   // afstand til venstre kant (positiv)
+        const distLeft   = halfW + localX;
         const distRight  = halfW - localX;
         const distTop    = halfH + localY;
         const distBottom = halfH - localY;
-
         let pushLocal = { x: 0, y: 0 };
         const minDist = Math.min(distLeft, distRight, distTop, distBottom);
-
         if (minDist === distLeft)        pushLocal.x = -distLeft - 0.1;
         else if (minDist === distRight)  pushLocal.x = distRight + 0.1;
         else if (minDist === distTop)    pushLocal.y = -distTop - 0.1;
         else if (minDist === distBottom) pushLocal.y = distBottom + 0.1;
-
-        // Transformer push tilbage til verdens-rum
-        const angle = -rad; // omvendt rotation
-        const worldPushX = pushLocal.x * Math.cos(angle) - pushLocal.y * Math.sin(angle);
-        const worldPushY = pushLocal.x * Math.sin(angle) + pushLocal.y * Math.cos(angle);
-
-        return { dx: worldPushX, dy: worldPushY };
+        const angle = -rad;
+        return {
+            dx: pushLocal.x * Math.cos(angle) - pushLocal.y * Math.sin(angle),
+            dy: pushLocal.x * Math.sin(angle) + pushLocal.y * Math.cos(angle)
+        };
     }
     return null;
 }
@@ -294,18 +391,15 @@ function resolveCollisions() {
         [me.x, me.y + PLAYER_SIZE],
         [me.x + PLAYER_SIZE, me.y + PLAYER_SIZE]
     ];
-
-    let totalPushX = 0, totalPushY = 0;
-
     for (const wall of walls) {
-        for (const corner of corners) {
-            if (pointInRotatedRect(corner[0], corner[1], wall)) {
-                const push = pushOutOfWall(corner[0], corner[1], wall);
+        for (let i=0; i<4; i++) {
+            const cx = corners[i][0], cy = corners[i][1];
+            if (pointInRotatedRect(cx, cy, wall)) {
+                const push = pushOutOfWall(cx, cy, wall);
                 if (push) {
-                    // Anvend push – vi vil flytte hele spilleren, så alle hjørner kommer ud
                     me.x += push.dx;
                     me.y += push.dy;
-                    // Opdatér hjørnerne, så næste check tager højde for ny position
+                    // Opdatér alle hjørner
                     corners[0][0] = me.x; corners[0][1] = me.y;
                     corners[1][0] = me.x + PLAYER_SIZE; corners[1][1] = me.y;
                     corners[2][0] = me.x; corners[2][1] = me.y + PLAYER_SIZE;
@@ -316,41 +410,41 @@ function resolveCollisions() {
     }
 }
 
-// ---------- BEVÆGELSE ----------
 function movePlayer(dx, dy) {
     me.x += dx;
     me.y += dy;
-
-    // Udfør glidende kollisionsopløsning
     resolveCollisions();
-
-    // Klip til banens grænser
     me.x = Math.max(0, Math.min(MAP_WIDTH - PLAYER_SIZE, me.x));
     me.y = Math.max(0, Math.min(MAP_HEIGHT - PLAYER_SIZE, me.y));
 }
 
+// ---------- UPDATE LOOP ----------
 function update(){
     let moved = false;
-
     if(keys["w"]){ movePlayer(0,-SPEED); moved = true; }
     if(keys["s"]){ movePlayer(0, SPEED); moved = true; }
     if(keys["a"]){ movePlayer(-SPEED,0); moved = true; }
     if(keys["d"]){ movePlayer( SPEED,0); moved = true; }
 
-    // Opdatér server position
     if(moved && Date.now() - lastSend > 50){
         socket.emit("move",{ x: me.x, y: me.y });
         lastSend = Date.now();
     }
 
-    // Recoil udjævning
-    recoilX = lerp(recoilX, 0, 0.2);
-    recoilY = lerp(recoilY, 0, 0.2);
+    // Udjævn recoil
+    recoilX = lerp(recoilX, 0, 0.15);
+    recoilY = lerp(recoilY, 0, 0.15);
+    // Udjævn screen shake
+    shakeX = lerp(shakeX, 0, 0.2);
+    shakeY = lerp(shakeY, 0, 0.2);
 
-    const targetCamX = me.x - canvas.width/2 + PLAYER_SIZE/2 + recoilX;
-    const targetCamY = me.y - canvas.height/2 + PLAYER_SIZE/2 + recoilY;
+    const targetCamX = me.x - canvas.width/2 + PLAYER_SIZE/2 + recoilX + shakeX;
+    const targetCamY = me.y - canvas.height/2 + PLAYER_SIZE/2 + recoilY + shakeY;
     camX = lerp(camX, targetCamX, 0.08);
     camY = lerp(camY, targetCamY, 0.08);
+
+    // Reload status
+    updateReload();
 
     // Opdatér partikler
     for(let i=particles.length-1; i>=0; i--){
@@ -364,34 +458,104 @@ function update(){
 
 // ---------- TEGNEFUNKTIONER ----------
 function drawGrass(){
-    ctx.fillStyle = "#57c76d";
+    // Basis græs
+    ctx.fillStyle = "#5a9e4b";
     ctx.fillRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+
+    // Subtil stribet tekstur
+    ctx.fillStyle = "#4f8e42";
+    for(let y=-camY; y<MAP_HEIGHT-camY; y+=16){
+        ctx.fillRect(-camX, y, MAP_WIDTH, 2);
+    }
+
+    // Små græsstrå
+    ctx.strokeStyle = "#3d7030";
     ctx.lineWidth = 1;
-    for(let x=0;x<MAP_WIDTH;x+=24){
-        for(let y=0;y<MAP_HEIGHT;y+=24){
+    for(let x=-camX; x<MAP_WIDTH-camX; x+=18){
+        for(let y=-camY; y<MAP_HEIGHT-camY; y+=22){
             ctx.beginPath();
-            ctx.moveTo(x-camX, y-camY+3);
-            ctx.lineTo(x-camX+1, y-camY-3);
+            ctx.moveTo(x, y+2);
+            ctx.lineTo(x+1, y-2);
             ctx.stroke();
         }
     }
+}
+
+function drawWallShadow(wall){
+    // Drop shadow
+    ctx.save();
+    ctx.translate(wall.x + wall.w/2 - camX + 4, wall.y + wall.h/2 - camY + 4);
+    ctx.rotate(wall.r * Math.PI / 180);
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
+    ctx.restore();
 }
 
 function drawWall(wall){
     ctx.save();
     ctx.translate(wall.x + wall.w/2 - camX, wall.y + wall.h/2 - camY);
     ctx.rotate(wall.r * Math.PI / 180);
-    ctx.fillStyle = "#7f7f7f";
+
+    // Baggrund
+    ctx.fillStyle = "#8a8a8a";
     ctx.fillRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
-    ctx.fillStyle = "#9a9a9a";
-    for(let x=-wall.w/2; x<wall.w/2; x+=20){
-        ctx.fillRect(x, -wall.h/2, 3, wall.h);
+
+    // Stenmønster – små mørkere rektangler
+    ctx.fillStyle = "#6e6e6e";
+    const brickW = 16, brickH = 10;
+    for(let bx=-wall.w/2; bx<wall.w/2; bx+=brickW+3){
+        for(let by=-wall.h/2; by<wall.h/2; by+=brickH+2){
+            const w = brickW * (0.6 + Math.random()*0.4);
+            const h = brickH * (0.6 + Math.random()*0.4);
+            ctx.fillRect(bx, by, w, h);
+        }
     }
-    ctx.strokeStyle = "#5a5a5a";
+
+    // Kantlinje
+    ctx.strokeStyle = "#505050";
     ctx.lineWidth = 2;
     ctx.strokeRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
+
     ctx.restore();
+}
+
+function drawDecorations(){
+    for(const d of decorations){
+        const sx = d.x - camX;
+        const sy = d.y - camY;
+
+        // Skygge
+        ctx.fillStyle = "rgba(0,0,0,0.3)";
+        ctx.beginPath();
+        if(d.type === "bush"){
+            ctx.arc(sx+2, sy+3, d.size, 0, Math.PI*2);
+        } else {
+            ctx.fillRect(sx-d.size/2+2, sy-d.size/2+3, d.size, d.size);
+        }
+        ctx.fill();
+
+        // Selve objektet
+        if(d.type === "bush"){
+            ctx.fillStyle = "#3b5e1f";
+            ctx.beginPath();
+            ctx.arc(sx, sy, d.size, 0, Math.PI*2);
+            ctx.fill();
+            // lysere prikker
+            ctx.fillStyle = "#4b7029";
+            for(let i=0;i<5;i++){
+                const ax = sx - d.size/2 + Math.random()*d.size;
+                const ay = sy - d.size/2 + Math.random()*d.size;
+                ctx.beginPath();
+                ctx.arc(ax, ay, d.size/5, 0, Math.PI*2);
+                ctx.fill();
+            }
+        } else { // rock
+            ctx.fillStyle = "#6b6b6b";
+            ctx.fillRect(sx-d.size/2, sy-d.size/2, d.size, d.size);
+            ctx.fillStyle = "#545454";
+            ctx.fillRect(sx-d.size/2+2, sy-d.size/2+2, d.size-4, d.size-4);
+        }
+    }
 }
 
 function drawHealthBar(p, screenX, screenY) {
@@ -401,28 +565,67 @@ function drawHealthBar(p, screenX, screenY) {
     const h = 6;
     const x = screenX;
     const y = screenY - 14;
-    ctx.fillStyle = "#333";
+    ctx.fillStyle = "#222";
     ctx.fillRect(x, y, w, h);
     const fill = (hp / 100) * w;
-    ctx.fillStyle = hp > 30 ? "#0f0" : "#f00";
+    ctx.fillStyle = hp > 30 ? "#4f4" : "#f44";
     ctx.fillRect(x, y, fill, h);
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 1;
     ctx.strokeRect(x, y, w, h);
 }
 
+function drawPlayerShadow(sx, sy){
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.beginPath();
+    ctx.ellipse(sx+PLAYER_SIZE/2, sy+PLAYER_SIZE+2, PLAYER_SIZE/2, PLAYER_SIZE/4, 0, 0, Math.PI*2);
+    ctx.fill();
+}
+
+function drawAimLine(sx, sy, angle){
+    // Tegn en lille linje fra centrum i retning af aimAngle
+    const centerX = sx + PLAYER_SIZE/2;
+    const centerY = sy + PLAYER_SIZE/2;
+    const len = 14;
+    const endX = centerX + Math.cos(angle)*len;
+    const endY = centerY + Math.sin(angle)*len;
+    ctx.strokeStyle = "#ff0";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+}
+
+function drawVignette(){
+    const gradient = ctx.createRadialGradient(
+        canvas.width/2, canvas.height/2, canvas.width*0.5,
+        canvas.width/2, canvas.height/2, canvas.width*0.9
+    );
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(1, "rgba(0,0,0,0.35)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
 function draw(){
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
     drawGrass();
+    drawDecorations();
+
+    // Skygger for vægge
+    for(const wall of walls) drawWallShadow(wall);
 
     // Banens ramme
-    ctx.strokeStyle = "white";
+    ctx.strokeStyle = "#fff";
     ctx.lineWidth = 4;
     ctx.strokeRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
 
+    // Vægge
     for(const wall of walls) drawWall(wall);
 
-    // Kugler med skygge/glød
+    // Kugler med skygge og glød
     for(const bullet of bullets){
         // Skygge
         ctx.fillStyle = "rgba(0,0,0,0.4)";
@@ -431,8 +634,8 @@ function draw(){
         ctx.fill();
         // Glød
         ctx.shadowColor = "orange";
-        ctx.shadowBlur = 8;
-        ctx.fillStyle = "yellow";
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = "#ffd700";
         ctx.beginPath();
         ctx.arc(bullet.x - camX, bullet.y - camY, 4, 0, Math.PI*2);
         ctx.fill();
@@ -440,7 +643,7 @@ function draw(){
         ctx.shadowBlur = 0;
     }
 
-    // Partikler (hit-effekter, mundingsglimt)
+    // Partikler
     for(const p of particles){
         const alpha = p.life / p.maxLife;
         ctx.globalAlpha = alpha;
@@ -451,20 +654,7 @@ function draw(){
         ctx.globalAlpha = 1;
     }
 
-    // Mig selv
-    const myScreenX = me.x - camX;
-    const myScreenY = me.y - camY;
-    ctx.fillStyle = "red";
-    ctx.fillRect(myScreenX, myScreenY, PLAYER_SIZE, PLAYER_SIZE);
-
-    if(players[myId]){
-        ctx.fillStyle = "white";
-        ctx.textAlign = "center";
-        ctx.fillText(players[myId].name || "Player", me.x - camX + 15, me.y - camY - 10);
-        drawHealthBar(players[myId], myScreenX, myScreenY);
-    }
-
-    // Andre spillere
+    // --- ANDRE SPILLERE (skygge, krop, navn, health, sigte) ---
     for(const id in players){
         if(id === myId) continue;
         const p = players[id];
@@ -474,22 +664,68 @@ function draw(){
         rp.y = lerp(rp.y, p.y, 0.2);
         const sx = rp.x - camX;
         const sy = rp.y - camY;
-        ctx.fillStyle = "blue";
+
+        drawPlayerShadow(sx, sy);
+
+        ctx.fillStyle = "#4a7ebb";
         ctx.fillRect(sx, sy, PLAYER_SIZE, PLAYER_SIZE);
-        ctx.fillStyle = "white";
+        // Lidt afrunding-effekt (mørkere kant)
+        ctx.fillStyle = "rgba(0,0,0,0.25)";
+        ctx.fillRect(sx+2, sy+2, PLAYER_SIZE-4, PLAYER_SIZE-4);
+
+        // Sigte-linje (hvis aimAngle findes)
+        if(typeof p.aimAngle === "number"){
+            drawAimLine(sx, sy, p.aimAngle);
+        }
+
+        ctx.fillStyle = "#fff";
         ctx.textAlign = "center";
         ctx.fillText(p.name || "Player", sx + 15, sy - 10);
         drawHealthBar(p, sx, sy);
     }
 
-    // Egen HP i hjørnet
-    if(myId && players[myId]){
-        ctx.fillStyle = "white";
-        ctx.font = "bold 18px Arial";
-        ctx.textAlign = "left";
-        ctx.fillText("HP: " + players[myId].hp, 20, canvas.height - 20);
+    // --- MIG SELV ---
+    const myScreenX = me.x - camX;
+    const myScreenY = me.y - camY;
+
+    drawPlayerShadow(myScreenX, myScreenY);
+
+    ctx.fillStyle = "#d22";
+    ctx.fillRect(myScreenX, myScreenY, PLAYER_SIZE, PLAYER_SIZE);
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillRect(myScreenX+2, myScreenY+2, PLAYER_SIZE-4, PLAYER_SIZE-4);
+
+    // Mit sigte (peger mod musen)
+    const rect = canvas.getBoundingClientRect();
+    // musens position i canvas
+    const mouseX = keys._mouseX || 0; // vi opdaterer i mousemove
+    const mouseY = keys._mouseY || 0;
+    if(mouseX && mouseY){
+        const worldMX = mouseX + camX;
+        const worldMY = mouseY + camY;
+        const centerX = me.x + PLAYER_SIZE/2;
+        const centerY = me.y + PLAYER_SIZE/2;
+        const aimAngle = Math.atan2(worldMY - centerY, worldMX - centerX);
+        drawAimLine(myScreenX, myScreenY, aimAngle);
     }
+
+    if(players[myId]){
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+        ctx.fillText(players[myId].name || "Player", me.x - camX + 15, me.y - camY - 10);
+        drawHealthBar(players[myId], myScreenX, myScreenY);
+    }
+
+    // Vignette over alt
+    drawVignette();
 }
+
+// Mus tracking for at vise sigte (opdateres konstant)
+canvas.addEventListener("mousemove", e => {
+    const rect = canvas.getBoundingClientRect();
+    keys._mouseX = e.clientX - rect.left;
+    keys._mouseY = e.clientY - rect.top;
+});
 
 function loop(){
     update();

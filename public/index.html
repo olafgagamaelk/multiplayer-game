@@ -26,42 +26,6 @@ canvas{
 #saveBtn{
     padding:8px 12px;
 }
-#ammoDisplay {
-    position: absolute;
-    bottom: 20px;
-    right: 20px;
-    color: white;
-    font-size: 18px;
-    background: rgba(0,0,0,0.7);
-    padding: 10px 20px;
-    border-radius: 8px;
-    z-index: 10;
-    font-weight: bold;
-}
-#reloadIndicator {
-    position: absolute;
-    bottom: 80px;
-    right: 20px;
-    color: #ff6b6b;
-    font-size: 14px;
-    background: rgba(0,0,0,0.7);
-    padding: 5px 15px;
-    border-radius: 5px;
-    z-index: 10;
-    display: none;
-}
-#hpDisplay {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    color: #4ecdc4;
-    font-size: 18px;
-    background: rgba(0,0,0,0.7);
-    padding: 10px 20px;
-    border-radius: 8px;
-    z-index: 10;
-    font-weight: bold;
-}
 </style>
 </head>
 <body>
@@ -70,10 +34,6 @@ canvas{
     <input id="nameInput" maxlength="12" placeholder="Dit navn">
     <button id="saveBtn">Gem navn</button>
 </div>
-
-<div id="ammoDisplay">🔫 12 / 12</div>
-<div id="reloadIndicator">🔄 Genlader...</div>
-<div id="hpDisplay">❤️ 100 HP</div>
 
 <canvas id="game"></canvas>
 
@@ -85,7 +45,7 @@ const ctx = canvas.getContext("2d");
 
 let myId = null;
 let players = {};
-let bullets = [];
+let bullets = {};
 let renderPlayers = {};
 
 const MAP_WIDTH = 1400;
@@ -93,11 +53,7 @@ const MAP_HEIGHT = 900;
 const PLAYER_SIZE = 30;
 const SPEED = 2.6;
 
-// DINE VÆGGE - SÆT DINE EGNE VÆGGE IND HER
-const walls = [
-    // Eksempel vægge - erstat med dine egne
-    // {x: 200, y: 200, w: 100, h: 20, r: 0},
-    // {x: 500, y: 300, w: 20, h: 150, r: 0}
+const walls = [ /* DIN LISTE BEHOLDES UÆNDRET */ 
 ];
 
 const me = { x: 700, y: 450 };
@@ -110,20 +66,11 @@ let lastSend = 0;
 let mouseX = 0;
 let mouseY = 0;
 
-// Pistol variabler
-let ammo = 12;
-let maxAmmo = 12;
-let isReloading = false;
-let reloadTimer = 0;
-const RELOAD_TIME = 1500;
-let shootCooldown = 0;
-const SHOOT_COOLDOWN = 200;
-
 function lerp(a,b,t){ return a + (b-a)*t; }
 
 function resize(){
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
 }
 resize();
 window.addEventListener("resize", resize);
@@ -132,267 +79,168 @@ socket.on("id", id => myId = id);
 
 // STATE MODTAGES (players + bullets)
 socket.on("state", data => {
-    players = data.players || {};
-    bullets = data.bullets || [];
+  players = data.players || {};
+  bullets = data.bullets || [];
 
-    for(const id in players){
-        if(!renderPlayers[id]){
-            renderPlayers[id] = { x: players[id].x, y: players[id].y };
-        }
+  for(const id in players){
+    if(!renderPlayers[id]){
+      renderPlayers[id] = { x: players[id].x, y: players[id].y };
     }
+  }
 
-    if(myId && players[myId]){
-        me.x = players[myId].x;
-        me.y = players[myId].y;
-        document.getElementById("hpDisplay").textContent = `❤️ ${players[myId].hp} HP`;
-    }
+  if(myId && players[myId]){
+    me.x = players[myId].x;
+    me.y = players[myId].y;
+  }
 });
 
 document.getElementById("saveBtn").onclick = () => {
-    socket.emit("name", document.getElementById("nameInput").value);
+  socket.emit("name", document.getElementById("nameInput").value);
 };
 
 document.addEventListener("keydown", e => {
-    keys[e.key.toLowerCase()] = true;
-    if(e.key.toLowerCase() === "r" && !isReloading && ammo < maxAmmo) {
-        startReload();
-    }
+  keys[e.key.toLowerCase()] = true;
 });
 document.addEventListener("keyup", e => {
-    keys[e.key.toLowerCase()] = false;
+  keys[e.key.toLowerCase()] = false;
 });
 
 // 🎯 MUS POSITION
 canvas.addEventListener("mousemove", (e) => {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
+  mouseX = e.clientX;
+  mouseY = e.clientY;
 });
 
-// 🔫 SKYD
+// 🔫 SKYD (venstre klik)
 canvas.addEventListener("mousedown", (e) => {
-    if(e.button === 0) {
-        shoot();
-    }
+  if(e.button !== 0) return; // kun venstre klik
+
+  const angle = Math.atan2(
+    mouseY - canvas.height / 2,
+    mouseX - canvas.width / 2
+  );
+
+  socket.emit("shoot", { angle });
 });
 
-function shoot() {
-    if (isReloading || ammo <= 0 || shootCooldown > 0) {
-        if (ammo <= 0 && !isReloading) {
-            startReload();
-        }
-        return;
-    }
-    
-    const angle = Math.atan2(
-        mouseY - canvas.height / 2,
-        mouseX - canvas.width / 2
-    );
-
-    socket.emit("shoot", { angle });
-    ammo--;
-    shootCooldown = SHOOT_COOLDOWN;
-    updateAmmoDisplay();
-    
-    if (ammo === 0) {
-        setTimeout(() => startReload(), 300);
-    }
-}
-
-function startReload() {
-    if (isReloading || ammo === maxAmmo) return;
-    isReloading = true;
-    reloadTimer = 0;
-    document.getElementById("reloadIndicator").style.display = "block";
-}
-
-function updateAmmoDisplay() {
-    document.getElementById("ammoDisplay").textContent = `🔫 ${ammo} / ${maxAmmo}`;
-}
-
-// --- DIN ORIGINALE movement + collision
+// --- movement + collision (uændret)
 function pointInRotatedRect(px, py, wall){
-    const cx = wall.x + wall.w/2;
-    const cy = wall.y + wall.h/2;
-    const rad = -wall.r * Math.PI / 180;
+  const cx = wall.x + wall.w/2;
+  const cy = wall.y + wall.h/2;
+  const rad = -wall.r * Math.PI / 180;
 
-    const dx = px - cx;
-    const dy = py - cy;
+  const dx = px - cx;
+  const dy = py - cy;
 
-    const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
-    const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
+  const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
+  const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
 
-    return (
-        localX > -wall.w/2 && localX < wall.w/2 &&
-        localY > -wall.h/2 && localY < wall.h/2
-    );
+  return (
+    localX > -wall.w/2 && localX < wall.w/2 &&
+    localY > -wall.h/2 && localY < wall.h/2
+  );
 }
 
 function playerHitsWall(x,y){
-    const points = [
-        [x,y],
-        [x+PLAYER_SIZE,y],
-        [x,y+PLAYER_SIZE],
-        [x+PLAYER_SIZE,y+PLAYER_SIZE]
-    ];
+  const points = [
+    [x,y],
+    [x+PLAYER_SIZE,y],
+    [x,y+PLAYER_SIZE],
+    [x+PLAYER_SIZE,y+PLAYER_SIZE]
+  ];
 
-    for(const wall of walls){
-        for(const p of points){
-            if(pointInRotatedRect(p[0],p[1],wall)){
-                return true;
-            }
-        }
+  for(const wall of walls){
+    for(const p of points){
+      if(pointInRotatedRect(p[0],p[1],wall)){
+        return true;
+      }
     }
-    return false;
+  }
+  return false;
 }
 
 function movePlayer(dx,dy){
-    const oldX = me.x;
-    const oldY = me.y;
+  const oldX = me.x;
+  const oldY = me.y;
 
-    me.x += dx;
-    if(playerHitsWall(me.x, me.y)) me.x = oldX;
+  me.x += dx;
+  if(playerHitsWall(me.x, me.y)) me.x = oldX;
 
-    me.y += dy;
-    if(playerHitsWall(me.x, me.y)) me.y = oldY;
+  me.y += dy;
+  if(playerHitsWall(me.x, me.y)) me.y = oldY;
 }
 
 function update(){
-    let moved = false;
+  let moved = false;
 
-    // Bevægelse
-    if(keys["w"]){ movePlayer(0,-SPEED); moved = true; }
-    if(keys["s"]){ movePlayer(0,SPEED); moved = true; }
-    if(keys["a"]){ movePlayer(-SPEED,0); moved = true; }
-    if(keys["d"]){ movePlayer(SPEED,0); moved = true; }
+  if(keys["w"]){ movePlayer(0,-SPEED); moved = true; }
+  if(keys["s"]){ movePlayer(0,SPEED); moved = true; }
+  if(keys["a"]){ movePlayer(-SPEED,0); moved = true; }
+  if(keys["d"]){ movePlayer(SPEED,0); moved = true; }
 
-    // Send kun hver 50ms
-    if(moved && Date.now() - lastSend > 50){
-        socket.emit("move",{ x: me.x, y: me.y });
-        lastSend = Date.now();
-    }
+  if(moved && Date.now() - lastSend > 50){
+    socket.emit("move",{ x: me.x, y: me.y });
+    lastSend = Date.now();
+  }
 
-    // Opdater pistol
-    if (shootCooldown > 0) {
-        shootCooldown -= 16.67;
-    }
-    
-    if (isReloading) {
-        reloadTimer += 16.67;
-        if (reloadTimer >= RELOAD_TIME) {
-            ammo = maxAmmo;
-            isReloading = false;
-            reloadTimer = 0;
-            document.getElementById("reloadIndicator").style.display = "none";
-            updateAmmoDisplay();
-        }
-    }
-
-    // Camera follow - smooth
-    camX = lerp(camX, me.x - canvas.width/2, 0.08);
-    camY = lerp(camY, me.y - canvas.height/2, 0.08);
+  camX = lerp(camX, me.x - canvas.width/2, 0.08);
+  camY = lerp(camY, me.y - canvas.height/2, 0.08);
 }
 
 function draw(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // Baggrund
-    ctx.fillStyle = "#57c76d";
-    ctx.fillRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
+  ctx.fillStyle = "#57c76d";
+  ctx.fillRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
 
-    // Vægge
-    ctx.fillStyle = "#8B4513";
-    ctx.strokeStyle = "#654321";
-    ctx.lineWidth = 2;
-    for(const wall of walls){
-        ctx.save();
-        ctx.translate(wall.x - camX + wall.w/2, wall.y - camY + wall.h/2);
-        ctx.rotate(wall.r * Math.PI / 180);
-        ctx.fillRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
-        ctx.strokeRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
-        ctx.restore();
-    }
+  // bullets 🔫
+  ctx.fillStyle = "yellow";
+  for(const b of bullets){
+    ctx.beginPath();
+    ctx.arc(b.x - camX, b.y - camY, 4, 0, Math.PI*2);
+    ctx.fill();
+  }
 
-    // Bullets
-    ctx.fillStyle = "yellow";
-    ctx.shadowColor = "orange";
-    ctx.shadowBlur = 10;
-    for(const b of bullets){
-        ctx.beginPath();
-        ctx.arc(b.x - camX, b.y - camY, 4, 0, Math.PI*2);
-        ctx.fill();
-    }
-    ctx.shadowBlur = 0;
+  // mig
+  ctx.fillStyle = "red";
+  ctx.fillRect(me.x - camX, me.y - camY, PLAYER_SIZE, PLAYER_SIZE);
 
-    // Andre spillere
-    for(const id in players){
-        if(id === myId) continue;
+  // andre
+  for(const id in players){
+    if(id === myId) continue;
 
-        const p = players[id];
-        const rp = renderPlayers[id];
-        if(!rp) continue;
+    const p = players[id];
+    const rp = renderPlayers[id];
+    if(!rp) continue;
 
-        // Smooth interpolation
-        rp.x = lerp(rp.x, p.x, 0.2);
-        rp.y = lerp(rp.y, p.y, 0.2);
+    rp.x = lerp(rp.x, p.x, 0.2);
+    rp.y = lerp(rp.y, p.y, 0.2);
 
-        // Spiller
-        ctx.fillStyle = "blue";
-        ctx.shadowColor = "rgba(0,0,255,0.3)";
-        ctx.shadowBlur = 10;
-        ctx.fillRect(rp.x - camX, rp.y - camY, PLAYER_SIZE, PLAYER_SIZE);
-        ctx.shadowBlur = 0;
-        
-        // Navn
-        ctx.fillStyle = "white";
-        ctx.font = "12px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(p.name || "Player", rp.x + PLAYER_SIZE/2 - camX, rp.y - 10 - camY);
-        
-        // HP bar
-        const hpPercent = Math.max(0, p.hp / 100);
-        ctx.fillStyle = "#333";
-        ctx.fillRect(rp.x - camX, rp.y - 8 - camY, PLAYER_SIZE, 4);
-        ctx.fillStyle = hpPercent > 0.6 ? "#4ecdc4" : hpPercent > 0.3 ? "#ffa502" : "#ff6b6b";
-        ctx.fillRect(rp.x - camX, rp.y - 8 - camY, PLAYER_SIZE * hpPercent, 4);
-    }
+    ctx.fillStyle = "blue";
+    ctx.fillRect(rp.x - camX, rp.y - camY, PLAYER_SIZE, PLAYER_SIZE);
 
-    // Mig selv
-    ctx.fillStyle = "red";
-    ctx.shadowColor = "rgba(255,0,0,0.3)";
-    ctx.shadowBlur = 10;
-    ctx.fillRect(me.x - camX, me.y - camY, PLAYER_SIZE, PLAYER_SIZE);
-    ctx.shadowBlur = 0;
-    
-    // Mit navn
+    // Vis navn og HP over spiller
     ctx.fillStyle = "white";
     ctx.font = "12px Arial";
     ctx.textAlign = "center";
-    const myName = players[myId]?.name || "Player";
-    ctx.fillText(myName, me.x + PLAYER_SIZE/2 - camX, me.y - 10 - camY);
-    
-    // Pistol retning (kun for mig)
-    const angle = Math.atan2(
-        mouseY - canvas.height / 2,
-        mouseX - canvas.width / 2
-    );
-    const gunLength = 20;
-    const gunX = me.x + PLAYER_SIZE/2 + Math.cos(angle) * gunLength - camX;
-    const gunY = me.y + PLAYER_SIZE/2 + Math.sin(angle) * gunLength - camY;
-    ctx.beginPath();
-    ctx.moveTo(me.x + PLAYER_SIZE/2 - camX, me.y + PLAYER_SIZE/2 - camY);
-    ctx.lineTo(gunX, gunY);
-    ctx.strokeStyle = "#333";
-    ctx.lineWidth = 4;
-    ctx.shadowBlur = 5;
-    ctx.shadowColor = "rgba(0,0,0,0.3)";
-    ctx.stroke();
-    ctx.shadowBlur = 0;
+    ctx.fillText(p.name, rp.x - camX + PLAYER_SIZE/2, rp.y - camY - 10);
+    ctx.fillText("❤️" + p.hp, rp.x - camX + PLAYER_SIZE/2, rp.y - camY + PLAYER_SIZE + 15);
+  }
+
+  // Vis eget navn og HP
+  if(myId && players[myId]) {
+    ctx.fillStyle = "white";
+    ctx.font = "12px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(players[myId].name, me.x - camX + PLAYER_SIZE/2, me.y - camY - 10);
+    ctx.fillText("❤️" + players[myId].hp, me.x - camX + PLAYER_SIZE/2, me.y - camY + PLAYER_SIZE + 15);
+  }
 }
 
 function loop(){
-    update();
-    draw();
-    requestAnimationFrame(loop);
+  update();
+  draw();
+  requestAnimationFrame(loop);
 }
 loop();
 </script>

@@ -13,7 +13,6 @@ body{
 }
 canvas{
     display:block;
-    cursor: crosshair;
 }
 #ui{
     position:absolute;
@@ -27,18 +26,41 @@ canvas{
 #saveBtn{
     padding:8px 12px;
 }
-#hpDisplay{
-    position:absolute;
-    bottom:20px;
-    left:50%;
-    transform:translateX(-50%);
-    color:white;
-    font-size:18px;
-    background:rgba(0,0,0,0.6);
-    padding:8px 16px;
-    border-radius:8px;
-    z-index:10;
-    pointer-events:none;
+#ammoDisplay {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    color: white;
+    font-size: 18px;
+    background: rgba(0,0,0,0.7);
+    padding: 10px 20px;
+    border-radius: 8px;
+    z-index: 10;
+    font-weight: bold;
+}
+#reloadIndicator {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    color: #ff6b6b;
+    font-size: 14px;
+    background: rgba(0,0,0,0.7);
+    padding: 5px 15px;
+    border-radius: 5px;
+    z-index: 10;
+    display: none;
+}
+#hpDisplay {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    color: #4ecdc4;
+    font-size: 18px;
+    background: rgba(0,0,0,0.7);
+    padding: 10px 20px;
+    border-radius: 8px;
+    z-index: 10;
+    font-weight: bold;
 }
 </style>
 </head>
@@ -49,6 +71,8 @@ canvas{
     <button id="saveBtn">Gem navn</button>
 </div>
 
+<div id="ammoDisplay">🔫 12 / 12</div>
+<div id="reloadIndicator">🔄 Genlader...</div>
 <div id="hpDisplay">❤️ 100 HP</div>
 
 <canvas id="game"></canvas>
@@ -58,7 +82,6 @@ canvas{
 const socket = io();
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const hpDisplay = document.getElementById("hpDisplay");
 
 let myId = null;
 let players = {};
@@ -82,6 +105,15 @@ let lastSend = 0;
 
 let mouseX = 0;
 let mouseY = 0;
+
+// Pistol variabler
+let ammo = 12;
+let maxAmmo = 12;
+let isReloading = false;
+let reloadTimer = 0;
+const RELOAD_TIME = 1500; // 1.5 sekunder
+let shootCooldown = 0;
+const SHOOT_COOLDOWN = 200; // 200ms mellem skud
 
 function lerp(a,b,t){ return a + (b-a)*t; }
 
@@ -110,8 +142,7 @@ socket.on("state", data => {
     me.y = players[myId].y;
     
     // Opdater HP display
-    const hp = players[myId].hp || 100;
-    hpDisplay.textContent = `❤️ ${Math.round(hp)} HP`;
+    document.getElementById("hpDisplay").textContent = `❤️ ${players[myId].hp} HP`;
   }
 });
 
@@ -121,6 +152,11 @@ document.getElementById("saveBtn").onclick = () => {
 
 document.addEventListener("keydown", e => {
   keys[e.key.toLowerCase()] = true;
+  
+  // R tast til genladning
+  if(e.key.toLowerCase() === "r" && !isReloading && ammo < maxAmmo) {
+    startReload();
+  }
 });
 document.addEventListener("keyup", e => {
   keys[e.key.toLowerCase()] = false;
@@ -128,31 +164,50 @@ document.addEventListener("keyup", e => {
 
 // 🎯 MUS POSITION
 canvas.addEventListener("mousemove", (e) => {
-  const rect = canvas.getBoundingClientRect();
-  mouseX = e.clientX - rect.left;
-  mouseY = e.clientY - rect.top;
+  mouseX = e.clientX;
+  mouseY = e.clientY;
 });
 
-// 🔫 SKYD - Højreklik eller venstreklik
+// 🔫 SKYD - med ammo system
 canvas.addEventListener("mousedown", (e) => {
-  if (e.button === 0) { // Venstreklik
+  if(e.button === 0) { // Venstre klik
     shoot();
   }
 });
 
-// Højreklik for at skyde
-canvas.addEventListener("contextmenu", (e) => {
-  e.preventDefault();
-  shoot();
-});
-
 function shoot() {
+  if (isReloading || ammo <= 0 || shootCooldown > 0) {
+    if (ammo <= 0 && !isReloading) {
+      startReload();
+    }
+    return;
+  }
+  
   const angle = Math.atan2(
     mouseY - canvas.height / 2,
     mouseX - canvas.width / 2
   );
 
   socket.emit("shoot", { angle });
+  ammo--;
+  shootCooldown = SHOOT_COOLDOWN;
+  updateAmmoDisplay();
+  
+  // Automatisk genladning når magasinet er tomt
+  if (ammo === 0) {
+    setTimeout(() => startReload(), 300);
+  }
+}
+
+function startReload() {
+  if (isReloading || ammo === maxAmmo) return;
+  isReloading = true;
+  reloadTimer = 0;
+  document.getElementById("reloadIndicator").style.display = "block";
+}
+
+function updateAmmoDisplay() {
+  document.getElementById("ammoDisplay").textContent = `🔫 ${ammo} / ${maxAmmo}`;
 }
 
 // --- movement + collision (uændret)
@@ -215,44 +270,25 @@ function update(){
     lastSend = Date.now();
   }
 
+  // Opdater pistol cooldown
+  if (shootCooldown > 0) {
+    shootCooldown -= 16.67; // ~60fps
+  }
+  
+  // Opdater genladning
+  if (isReloading) {
+    reloadTimer += 16.67;
+    if (reloadTimer >= RELOAD_TIME) {
+      ammo = maxAmmo;
+      isReloading = false;
+      reloadTimer = 0;
+      document.getElementById("reloadIndicator").style.display = "none";
+      updateAmmoDisplay();
+    }
+  }
+
   camX = lerp(camX, me.x - canvas.width/2, 0.08);
   camY = lerp(camY, me.y - canvas.height/2, 0.08);
-}
-
-// 🔫 TEGN PISTOL
-function drawGun(x, y, angle) {
-  const cx = x + PLAYER_SIZE/2;
-  const cy = y + PLAYER_SIZE/2;
-  
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-  
-  // Pistol skaft
-  ctx.fillStyle = "#333";
-  ctx.fillRect(0, -3, 20, 6);
-  
-  // Pistol løb
-  ctx.fillStyle = "#444";
-  ctx.fillRect(15, -4, 8, 8);
-  
-  // Pistol greb
-  ctx.fillStyle = "#2a2a2a";
-  ctx.beginPath();
-  ctx.moveTo(0, 3);
-  ctx.lineTo(-5, 10);
-  ctx.lineTo(5, 10);
-  ctx.closePath();
-  ctx.fill();
-  
-  // Trigger guard
-  ctx.strokeStyle = "#555";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(2, 0, 4, 0, Math.PI);
-  ctx.stroke();
-  
-  ctx.restore();
 }
 
 function draw(){
@@ -265,83 +301,56 @@ function draw(){
   ctx.fillStyle = "yellow";
   for(const b of bullets){
     ctx.beginPath();
-    ctx.arc(b.x - camX, b.y - camY, 5, 0, Math.PI*2);
+    ctx.arc(b.x - camX, b.y - camY, 4, 0, Math.PI*2);
     ctx.fill();
-    
-    // Glow effekt
-    ctx.shadowColor = "yellow";
-    ctx.shadowBlur = 10;
-    ctx.fill();
-    ctx.shadowBlur = 0;
   }
 
-  // Alle spillere
+  // mig - med pistol retning
+  ctx.fillStyle = "red";
+  ctx.fillRect(me.x - camX, me.y - camY, PLAYER_SIZE, PLAYER_SIZE);
+  
+  // Tegn pistol retning for spiller
+  const angle = Math.atan2(
+    mouseY - canvas.height / 2,
+    mouseX - canvas.width / 2
+  );
+  const gunLength = 20;
+  const gunX = me.x + PLAYER_SIZE/2 + Math.cos(angle) * gunLength - camX;
+  const gunY = me.y + PLAYER_SIZE/2 + Math.sin(angle) * gunLength - camY;
+  ctx.beginPath();
+  ctx.moveTo(me.x + PLAYER_SIZE/2 - camX, me.y + PLAYER_SIZE/2 - camY);
+  ctx.lineTo(gunX, gunY);
+  ctx.strokeStyle = "#333";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  // andre
   for(const id in players){
+    if(id === myId) continue;
+
     const p = players[id];
     const rp = renderPlayers[id];
     if(!rp) continue;
 
-    if(id === myId) {
-      // Mig selv - med pistol
-      const angle = Math.atan2(
-        mouseY - canvas.height/2,
-        mouseX - canvas.width/2
-      );
-      
-      ctx.fillStyle = "red";
-      ctx.fillRect(me.x - camX, me.y - camY, PLAYER_SIZE, PLAYER_SIZE);
-      
-      // Tegn pistol for mig
-      drawGun(me.x - camX, me.y - camY, angle);
-      
-      // Tegn navn
-      ctx.fillStyle = "white";
-      ctx.font = "14px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText(p.name || "You", me.x - camX + PLAYER_SIZE/2, me.y - camY - 10);
-      
-      // HP bar
-      drawHPBar(me.x - camX, me.y - camY - 25, p.hp || 100);
-      
-    } else {
-      // Andre spillere - med pistol pegende mod deres mål
-      rp.x = lerp(rp.x, p.x, 0.2);
-      rp.y = lerp(rp.y, p.y, 0.2);
+    rp.x = lerp(rp.x, p.x, 0.2);
+    rp.y = lerp(rp.y, p.y, 0.2);
 
-      ctx.fillStyle = "blue";
-      ctx.fillRect(rp.x - camX, rp.y - camY, PLAYER_SIZE, PLAYER_SIZE);
-      
-      // Tegn pistol for andre (peger mod dem selv eller mod os)
-      const targetAngle = Math.atan2(
-        (me.y + PLAYER_SIZE/2) - (rp.y + PLAYER_SIZE/2),
-        (me.x + PLAYER_SIZE/2) - (rp.x + PLAYER_SIZE/2)
-      );
-      drawGun(rp.x - camX, rp.y - camY, targetAngle);
-      
-      // Tegn navn
-      ctx.fillStyle = "white";
-      ctx.font = "14px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText(p.name || "Player", rp.x - camX + PLAYER_SIZE/2, rp.y - camY - 10);
-      
-      // HP bar
-      drawHPBar(rp.x - camX, rp.y - camY - 25, p.hp || 100);
-    }
+    ctx.fillStyle = "blue";
+    ctx.fillRect(rp.x - camX, rp.y - camY, PLAYER_SIZE, PLAYER_SIZE);
+    
+    // Vis navn over spiller
+    ctx.fillStyle = "white";
+    ctx.font = "12px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(p.name || "Player", rp.x + PLAYER_SIZE/2 - camX, rp.y - 10 - camY);
+    
+    // Vis HP bar for andre spillere
+    const hpPercent = p.hp / 100;
+    ctx.fillStyle = "#333";
+    ctx.fillRect(rp.x - camX, rp.y - 8 - camY, PLAYER_SIZE, 4);
+    ctx.fillStyle = hpPercent > 0.6 ? "#4ecdc4" : hpPercent > 0.3 ? "#ffa502" : "#ff6b6b";
+    ctx.fillRect(rp.x - camX, rp.y - 8 - camY, PLAYER_SIZE * hpPercent, 4);
   }
-}
-
-// ❤️ TEGN HP BAR
-function drawHPBar(x, y, hp) {
-  const barWidth = 30;
-  const barHeight = 4;
-  const hpPercent = Math.max(0, hp / 100);
-  
-  ctx.fillStyle = "rgba(0,0,0,0.5)";
-  ctx.fillRect(x, y, barWidth, barHeight);
-  
-  const hpColor = hpPercent > 0.5 ? "#4CAF50" : hpPercent > 0.25 ? "#FF9800" : "#f44336";
-  ctx.fillStyle = hpColor;
-  ctx.fillRect(x, y, barWidth * hpPercent, barHeight);
 }
 
 function loop(){

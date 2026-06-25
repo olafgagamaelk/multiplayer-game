@@ -19,7 +19,6 @@ const BULLET_SPEED = 10;          // pr. server tick (50 ms)
 const BULLET_RADIUS = 4;
 const DAMAGE = 34;
 
-// Vægge – præcis de samme som i klienten
 const walls = [
     {x:120,y:120,w:220,h:40,r:20},
     {x:450,y:90,w:180,h:40,r:-25},
@@ -80,7 +79,6 @@ function getRandomSpawn() {
         const y = Math.random() * (MAP_HEIGHT - PLAYER_SIZE);
         if (!playerHitsWall(x, y)) return { x, y };
     }
-    // fallback
     return { x: 700, y: 450 };
 }
 
@@ -108,12 +106,9 @@ io.on("connection", (socket) => {
         p.name = String(name).trim().substring(0, 12) || "Player";
     });
 
-    // ---------- nyt: skyd ----------
     socket.on("shoot", (angle) => {
         const p = players[socket.id];
         if (!p) return;
-
-        // start i midten af spilleren
         const startX = p.x + PLAYER_SIZE / 2;
         const startY = p.y + PLAYER_SIZE / 2;
 
@@ -135,8 +130,8 @@ io.on("connection", (socket) => {
 // ---------- spil-opdatering hver 50. ms ----------
 setInterval(() => {
     const toRemove = new Set();
+    const hitEvents = [];  // samler hit-beskeder
 
-    // Flyt kugler
     for (const b of bullets) {
         b.x += b.vx;
         b.y += b.vy;
@@ -152,36 +147,36 @@ setInterval(() => {
         for (const wall of walls) {
             if (pointInRotatedRect(b.x, b.y, wall)) {
                 hitWall = true;
+                toRemove.add(b.id);
+                hitEvents.push({ type: "wall", x: b.x, y: b.y });
                 break;
             }
         }
-        if (hitWall) {
-            toRemove.add(b.id);
-            continue;
-        }
+        if (hitWall) continue;
 
         // ramt en spiller?
         for (const id in players) {
-            if (id === b.ownerId) continue;   // ikke skyd dig selv
+            if (id === b.ownerId) continue;
             const p = players[id];
-            // simpel cirkel–rektangel kollision
             const closestX = Math.max(p.x, Math.min(b.x, p.x + PLAYER_SIZE));
             const closestY = Math.max(p.y, Math.min(b.y, p.y + PLAYER_SIZE));
             const dx = b.x - closestX;
             const dy = b.y - closestY;
             if (dx * dx + dy * dy < BULLET_RADIUS * BULLET_RADIUS) {
-                // ramt!
                 p.hp -= DAMAGE;
                 toRemove.add(b.id);
+                hitEvents.push({ type: "player", x: b.x, y: b.y, targetId: id });
+
+                // Underret den ramte spiller (skades-besked)
+                io.to(id).emit("damaged", { amount: DAMAGE });
 
                 if (p.hp <= 0) {
-                    // respawn
                     const spawn = getRandomSpawn();
                     p.x = spawn.x;
                     p.y = spawn.y;
                     p.hp = 100;
                 }
-                break;   // kugle forsvinder efter ét hit
+                break;
             }
         }
     }
@@ -193,7 +188,12 @@ setInterval(() => {
         }
     }
 
-    // Send tilstand til alle klienter
+    // Send hit-events til alle (så alle kan se effekterne)
+    if (hitEvents.length > 0) {
+        io.emit("bulletHit", hitEvents);
+    }
+
+    // Send fuld tilstand
     io.emit("state", {
         players: players,
         bullets: bullets

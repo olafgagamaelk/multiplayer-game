@@ -47,8 +47,8 @@ io.on("connection", (socket) => {
         const angle = data.angle;
 
         bullets.push({
-            x: p.x + 15,
-            y: p.y + 15,
+            x: p.x + PLAYER_SIZE/2,
+            y: p.y + PLAYER_SIZE/2,
             vx: Math.cos(angle) * BULLET_SPEED,
             vy: Math.sin(angle) * BULLET_SPEED,
             owner: socket.id,
@@ -62,24 +62,26 @@ io.on("connection", (socket) => {
 });
 
 function updateGame() {
+    // Opdater bullets
     for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
 
         b.x += b.vx;
         b.y += b.vy;
 
+        // Tjek collision med spillere
+        let hit = false;
         for (const id in players) {
             const p = players[id];
 
             if (id === b.owner) continue;
 
-            const dx = p.x - b.x;
-            const dy = p.y - b.y;
+            const dx = p.x + PLAYER_SIZE/2 - b.x;
+            const dy = p.y + PLAYER_SIZE/2 - b.y;
 
-            if (Math.sqrt(dx * dx + dy * dy) < 25) {
+            if (Math.sqrt(dx * dx + dy * dy) < 20) {
                 p.hp -= b.damage || 25;
-
-                bullets.splice(i, 1);
+                hit = true;
 
                 if (p.hp <= 0) {
                     p.hp = PLAYER_HP;
@@ -90,11 +92,18 @@ function updateGame() {
             }
         }
 
-        if (b.x < 0 || b.y < 0 || b.x > 2000 || b.y > 2000) {
+        if (hit) {
+            bullets.splice(i, 1);
+            continue;
+        }
+
+        // Fjern bullets uden for map
+        if (b.x < 0 || b.y < 0 || b.x > MAP_WIDTH || b.y > MAP_HEIGHT) {
             bullets.splice(i, 1);
         }
     }
 
+    // Send state til alle
     io.emit("state", {
         players,
         bullets

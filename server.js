@@ -79,18 +79,18 @@ function updateGame() {
 
       if (id === b.owner) continue;
 
-      const dx = p.x - b.x;
-      const dy = p.y - b.y;
+      const dx = (p.x + 15) - b.x;
+      const dy = (p.y + 15) - b.y;
 
-      if (Math.sqrt(dx * dx + dy * dy) < 25) {
+      if (Math.sqrt(dx * dx + dy * dy) < 20) {
         p.hp -= 25;
 
         bullets.splice(i, 1);
 
         if (p.hp <= 0) {
           p.hp = PLAYER_HP;
-          p.x = 700;
-          p.y = 450;
+          p.x = 700 + Math.random() * 100 - 50;
+          p.y = 450 + Math.random() * 100 - 50;
         }
         break;
       }
@@ -98,8 +98,8 @@ function updateGame() {
 
     // remove out of bounds
     if (
-      b.x < 0 || b.y < 0 ||
-      b.x > 2000 || b.y > 2000
+      b.x < -50 || b.y < -50 ||
+      b.x > 1450 || b.y > 950
     ) {
       bullets.splice(i, 1);
     }
@@ -115,5 +115,5 @@ setInterval(updateGame, 50);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, "0.0.0.0", () => {
-  console.log("Server started");
+  console.log("Server started on port " + PORT);
 });

@@ -93,11 +93,11 @@ const MAP_HEIGHT = 900;
 const PLAYER_SIZE = 30;
 const SPEED = 2.6;
 
-// DINE VÆGGE - KOPIER DEM FRA DIN ORIGINALE KODE
+// DINE VÆGGE - SÆT DINE EGNE VÆGGE IND HER
 const walls = [
-    // EKSEMPEL PÅ VÆGGE - ERSTAT MED DINE EGNE
-    // {x: 100, y: 100, w: 200, h: 20, r: 0},
-    // {x: 100, y: 300, w: 20, h: 200, r: 0}
+    // Eksempel vægge - erstat med dine egne
+    // {x: 200, y: 200, w: 100, h: 20, r: 0},
+    // {x: 500, y: 300, w: 20, h: 150, r: 0}
 ];
 
 const me = { x: 700, y: 450 };
@@ -209,7 +209,7 @@ function updateAmmoDisplay() {
     document.getElementById("ammoDisplay").textContent = `🔫 ${ammo} / ${maxAmmo}`;
 }
 
-// --- movement + collision
+// --- DIN ORIGINALE movement + collision
 function pointInRotatedRect(px, py, wall){
     const cx = wall.x + wall.w/2;
     const cy = wall.y + wall.h/2;
@@ -259,16 +259,19 @@ function movePlayer(dx,dy){
 function update(){
     let moved = false;
 
+    // Bevægelse
     if(keys["w"]){ movePlayer(0,-SPEED); moved = true; }
     if(keys["s"]){ movePlayer(0,SPEED); moved = true; }
     if(keys["a"]){ movePlayer(-SPEED,0); moved = true; }
     if(keys["d"]){ movePlayer(SPEED,0); moved = true; }
 
+    // Send kun hver 50ms
     if(moved && Date.now() - lastSend > 50){
         socket.emit("move",{ x: me.x, y: me.y });
         lastSend = Date.now();
     }
 
+    // Opdater pistol
     if (shootCooldown > 0) {
         shootCooldown -= 16.67;
     }
@@ -284,6 +287,7 @@ function update(){
         }
     }
 
+    // Camera follow - smooth
     camX = lerp(camX, me.x - canvas.width/2, 0.08);
     camY = lerp(camY, me.y - canvas.height/2, 0.08);
 }
@@ -297,21 +301,27 @@ function draw(){
 
     // Vægge
     ctx.fillStyle = "#8B4513";
+    ctx.strokeStyle = "#654321";
+    ctx.lineWidth = 2;
     for(const wall of walls){
         ctx.save();
         ctx.translate(wall.x - camX + wall.w/2, wall.y - camY + wall.h/2);
         ctx.rotate(wall.r * Math.PI / 180);
         ctx.fillRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
+        ctx.strokeRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
         ctx.restore();
     }
 
     // Bullets
     ctx.fillStyle = "yellow";
+    ctx.shadowColor = "orange";
+    ctx.shadowBlur = 10;
     for(const b of bullets){
         ctx.beginPath();
         ctx.arc(b.x - camX, b.y - camY, 4, 0, Math.PI*2);
         ctx.fill();
     }
+    ctx.shadowBlur = 0;
 
     // Andre spillere
     for(const id in players){
@@ -321,11 +331,16 @@ function draw(){
         const rp = renderPlayers[id];
         if(!rp) continue;
 
+        // Smooth interpolation
         rp.x = lerp(rp.x, p.x, 0.2);
         rp.y = lerp(rp.y, p.y, 0.2);
 
+        // Spiller
         ctx.fillStyle = "blue";
+        ctx.shadowColor = "rgba(0,0,255,0.3)";
+        ctx.shadowBlur = 10;
         ctx.fillRect(rp.x - camX, rp.y - camY, PLAYER_SIZE, PLAYER_SIZE);
+        ctx.shadowBlur = 0;
         
         // Navn
         ctx.fillStyle = "white";
@@ -334,7 +349,7 @@ function draw(){
         ctx.fillText(p.name || "Player", rp.x + PLAYER_SIZE/2 - camX, rp.y - 10 - camY);
         
         // HP bar
-        const hpPercent = p.hp / 100;
+        const hpPercent = Math.max(0, p.hp / 100);
         ctx.fillStyle = "#333";
         ctx.fillRect(rp.x - camX, rp.y - 8 - camY, PLAYER_SIZE, 4);
         ctx.fillStyle = hpPercent > 0.6 ? "#4ecdc4" : hpPercent > 0.3 ? "#ffa502" : "#ff6b6b";
@@ -343,9 +358,19 @@ function draw(){
 
     // Mig selv
     ctx.fillStyle = "red";
+    ctx.shadowColor = "rgba(255,0,0,0.3)";
+    ctx.shadowBlur = 10;
     ctx.fillRect(me.x - camX, me.y - camY, PLAYER_SIZE, PLAYER_SIZE);
+    ctx.shadowBlur = 0;
     
-    // Pistol retning
+    // Mit navn
+    ctx.fillStyle = "white";
+    ctx.font = "12px Arial";
+    ctx.textAlign = "center";
+    const myName = players[myId]?.name || "Player";
+    ctx.fillText(myName, me.x + PLAYER_SIZE/2 - camX, me.y - 10 - camY);
+    
+    // Pistol retning (kun for mig)
     const angle = Math.atan2(
         mouseY - canvas.height / 2,
         mouseX - canvas.width / 2
@@ -358,14 +383,10 @@ function draw(){
     ctx.lineTo(gunX, gunY);
     ctx.strokeStyle = "#333";
     ctx.lineWidth = 4;
+    ctx.shadowBlur = 5;
+    ctx.shadowColor = "rgba(0,0,0,0.3)";
     ctx.stroke();
-
-    // Mit navn
-    ctx.fillStyle = "white";
-    ctx.font = "12px Arial";
-    ctx.textAlign = "center";
-    const myName = players[myId]?.name || "Player";
-    ctx.fillText(myName, me.x + PLAYER_SIZE/2 - camX, me.y - 10 - camY);
+    ctx.shadowBlur = 0;
 }
 
 function loop(){

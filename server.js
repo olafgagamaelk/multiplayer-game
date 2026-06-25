@@ -17,7 +17,13 @@ const MAP_HEIGHT = 900;
 const PLAYER_SIZE = 30;
 const BULLET_SPEED = 10;
 const BULLET_RADIUS = 4;
-const DAMAGE = 34;
+
+// Våbenskader
+const WEAPON_DAMAGE = {
+    revolver: 20,
+    shotgun: 17,   // pr. pellet
+    sniper: 50
+};
 
 const walls = [
     {x:120,y:120,w:220,h:40,r:20},
@@ -38,7 +44,6 @@ const players = {};
 const bullets = [];
 let bulletId = 0;
 
-// ---------- hjælpefunktioner ----------
 function pointInRotatedRect(px, py, wall) {
     const cx = wall.x + wall.w / 2;
     const cy = wall.y + wall.h / 2;
@@ -79,14 +84,14 @@ function getRandomSpawn() {
     return { x: 700, y: 450 };
 }
 
-// ---------- spillerdata ----------
 io.on("connection", (socket) => {
     players[socket.id] = {
         x: 700,
         y: 450,
         name: "Player",
         hp: 100,
-        aimAngle: 0           // gemmer sidste skud-vinkel
+        aimAngle: 0,
+        weapon: "revolver"   // standardvåben
     };
 
     socket.emit("id", socket.id);
@@ -104,23 +109,55 @@ io.on("connection", (socket) => {
         p.name = String(name).trim().substring(0, 12) || "Player";
     });
 
-    socket.on("shoot", (angle) => {
+    // Våbenskift
+    socket.on("changeWeapon", (weapon) => {
         const p = players[socket.id];
         if (!p) return;
-        // Opdater sigtevinkel så andre kan se den
+        if (["revolver", "shotgun", "sniper"].includes(weapon)) {
+            p.weapon = weapon;
+        }
+    });
+
+    socket.on("shoot", (data) => {
+        const p = players[socket.id];
+        if (!p) return;
+
+        const angle = data.angle;
+        const weapon = data.weapon || "revolver";
         p.aimAngle = angle;
 
-        const startX = p.x + PLAYER_SIZE / 2;
-        const startY = p.y + PLAYER_SIZE / 2;
+        const centerX = p.x + PLAYER_SIZE / 2;
+        const centerY = p.y + PLAYER_SIZE / 2;
 
-        bullets.push({
-            id: bulletId++,
-            x: startX,
-            y: startY,
-            vx: BULLET_SPEED * Math.cos(angle),
-            vy: BULLET_SPEED * Math.sin(angle),
-            ownerId: socket.id
-        });
+        const damage = WEAPON_DAMAGE[weapon] || 20;
+
+        if (weapon === "shotgun") {
+            // 3 pellets med spredning
+            const spreadAngles = [-0.15, 0, 0.15];
+            for (const spread of spreadAngles) {
+                const a = angle + spread;
+                bullets.push({
+                    id: bulletId++,
+                    x: centerX,
+                    y: centerY,
+                    vx: BULLET_SPEED * Math.cos(a),
+                    vy: BULLET_SPEED * Math.sin(a),
+                    ownerId: socket.id,
+                    damage: damage
+                });
+            }
+        } else {
+            // Revolver eller sniper
+            bullets.push({
+                id: bulletId++,
+                x: centerX,
+                y: centerY,
+                vx: BULLET_SPEED * Math.cos(angle),
+                vy: BULLET_SPEED * Math.sin(angle),
+                ownerId: socket.id,
+                damage: damage
+            });
+        }
     });
 
     socket.on("disconnect", () => {
@@ -128,7 +165,7 @@ io.on("connection", (socket) => {
     });
 });
 
-// ---------- spil-opdatering hver 50. ms ----------
+// Spil-opdatering
 setInterval(() => {
     const toRemove = new Set();
     const hitEvents = [];
@@ -142,7 +179,6 @@ setInterval(() => {
             continue;
         }
 
-        // ramt væg?
         let hitWall = false;
         for (const wall of walls) {
             if (pointInRotatedRect(b.x, b.y, wall)) {
@@ -154,7 +190,6 @@ setInterval(() => {
         }
         if (hitWall) continue;
 
-        // ramt spiller?
         for (const id in players) {
             if (id === b.ownerId) continue;
             const p = players[id];
@@ -163,10 +198,10 @@ setInterval(() => {
             const dx = b.x - closestX;
             const dy = b.y - closestY;
             if (dx * dx + dy * dy < BULLET_RADIUS * BULLET_RADIUS) {
-                p.hp -= DAMAGE;
+                p.hp -= b.damage;
                 toRemove.add(b.id);
                 hitEvents.push({ type: "player", x: b.x, y: b.y, targetId: id });
-                io.to(id).emit("damaged", { amount: DAMAGE });
+                io.to(id).emit("damaged", { amount: b.damage });
 
                 if (p.hp <= 0) {
                     const spawn = getRandomSpawn();

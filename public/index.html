@@ -48,6 +48,7 @@ const ctx = canvas.getContext("2d");
 let myId = null;
 let players = {};
 let renderPlayers = {};
+let bullets = [];                 // <-- NYT
 
 const MAP_WIDTH = 1400;
 const MAP_HEIGHT = 900;
@@ -78,6 +79,7 @@ let camY = 0;
 
 const keys = {};
 let lastSend = 0;
+let lastShoot = 0;               // <-- NYT (cooldown)
 
 function lerp(a,b,t){
     return a + (b-a)*t;
@@ -93,8 +95,9 @@ window.addEventListener("resize", resize);
 socket.on("id", id => myId = id);
 
 socket.on("state", data => {
-
-    players = data;
+    // data indeholder nu både players og bullets
+    players = data.players || {};
+    bullets = data.bullets || [];
 
     for(const id in players){
         if(!renderPlayers[id]){
@@ -105,18 +108,25 @@ socket.on("state", data => {
         }
     }
 
-    if(myId){
-        if(!players[myId]) players[myId] = {};
+    // Håndter vores egen position (respawn m.m.)
+    if(myId && players[myId]){
+        const serverMe = players[myId];
+        const dx = serverMe.x - me.x;
+        const dy = serverMe.y - me.y;
+        if(Math.sqrt(dx*dx+dy*dy) > 60){
+            // tydelig teleport → respektér server
+            me.x = serverMe.x;
+            me.y = serverMe.y;
+        }
+        // Overskriv serverens position med vores lokale (prediction)
+        // men behold hp, name osv.
         players[myId].x = me.x;
         players[myId].y = me.y;
     }
 });
 
 document.getElementById("saveBtn").onclick = () => {
-    socket.emit(
-        "name",
-        document.getElementById("nameInput").value
-    );
+    socket.emit("name", document.getElementById("nameInput").value);
 };
 
 document.addEventListener("keydown", e => {
@@ -125,6 +135,27 @@ document.addEventListener("keydown", e => {
 
 document.addEventListener("keyup", e => {
     keys[e.key.toLowerCase()] = false;
+});
+
+// ---------- NYT: skyd med musen ----------
+canvas.addEventListener("mousedown", e => {
+    if(Date.now() - lastShoot < 500) return;   // 0,5 sek. cooldown
+    lastShoot = Date.now();
+
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // mus i spilverden
+    const worldMX = mouseX + camX;
+    const worldMY = mouseY + camY;
+
+    // spillerens centrum
+    const centerX = me.x + PLAYER_SIZE/2;
+    const centerY = me.y + PLAYER_SIZE/2;
+
+    const angle = Math.atan2(worldMY - centerY, worldMX - centerX);
+    socket.emit("shoot", angle);
 });
 
 // --- RIGTIG ROTERET COLLISION ---
@@ -308,6 +339,28 @@ function drawWall(wall){
     ctx.restore();
 }
 
+// ---------- NYT: tegn health bar ----------
+function drawHealthBar(p, screenX, screenY) {
+    if (typeof p.hp !== "number") return;
+    const hp = Math.max(0, p.hp);
+    const w = PLAYER_SIZE;
+    const h = 6;
+    const x = screenX;
+    const y = screenY - 14;
+
+    // baggrund
+    ctx.fillStyle = "#333";
+    ctx.fillRect(x, y, w, h);
+    // fyld
+    const fill = (hp / 100) * w;
+    ctx.fillStyle = hp > 30 ? "#0f0" : "#f00";
+    ctx.fillRect(x, y, fill, h);
+    // kant
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+}
+
 function draw(){
 
     ctx.clearRect(
@@ -333,57 +386,75 @@ function draw(){
         drawWall(wall);
     }
 
-    // mig selv
-    ctx.fillStyle = "red";
+    // ---------- NYT: tegn kugler ----------
+    for(const bullet of bullets){
+        ctx.fillStyle = "yellow";
+        ctx.beginPath();
+        ctx.arc(
+            bullet.x - camX,
+            bullet.y - camY,
+            4,
+            0,
+            Math.PI*2
+        );
+        ctx.fill();
+    }
 
+    // mig selv
+    const myScreenX = me.x - camX;
+    const myScreenY = me.y - camY;
+    ctx.fillStyle = "red";
     ctx.fillRect(
-        me.x - camX,
-        me.y - camY,
+        myScreenX,
+        myScreenY,
         PLAYER_SIZE,
         PLAYER_SIZE
     );
 
     if(players[myId]){
-
         ctx.fillStyle = "white";
         ctx.textAlign = "center";
-
         ctx.fillText(
             players[myId].name || "Player",
             me.x - camX + 15,
             me.y - camY - 10
         );
+        drawHealthBar(players[myId], myScreenX, myScreenY);
     }
 
     // andre spillere
     for(const id in players){
-
         if(id === myId) continue;
 
         const p = players[id];
         const rp = renderPlayers[id];
-
         if(!rp) continue;
 
         rp.x = lerp(rp.x,p.x,0.2);
         rp.y = lerp(rp.y,p.y,0.2);
 
+        const sx = rp.x - camX;
+        const sy = rp.y - camY;
         ctx.fillStyle = "blue";
-
-        ctx.fillRect(
-            rp.x - camX,
-            rp.y - camY,
-            PLAYER_SIZE,
-            PLAYER_SIZE
-        );
+        ctx.fillRect(sx, sy, PLAYER_SIZE, PLAYER_SIZE);
 
         ctx.fillStyle = "white";
-
+        ctx.textAlign = "center";
         ctx.fillText(
             p.name || "Player",
-            rp.x - camX + 15,
-            rp.y - camY - 10
+            sx + 15,
+            sy - 10
         );
+
+        drawHealthBar(p, sx, sy);
+    }
+
+    // ---------- NYT: vis egen HP i hjørnet ----------
+    if(myId && players[myId]){
+        ctx.fillStyle = "white";
+        ctx.font = "bold 18px Arial";
+        ctx.textAlign = "left";
+        ctx.fillText("HP: " + players[myId].hp, 20, canvas.height - 20);
     }
 }
 

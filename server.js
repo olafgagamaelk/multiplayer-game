@@ -15,13 +15,16 @@ app.use(express.static("public"));
 const MAP_WIDTH = 1400;
 const MAP_HEIGHT = 900;
 const PLAYER_SIZE = 30;
-const BULLET_SPEED = 10;
+const BULLET_SPEED = 14;        // hurtigere generelt
+const SNIPER_BULLET_SPEED = 22; // sniper er hurtigst
 const BULLET_RADIUS = 4;
 
 const WEAPON_DAMAGE = {
     revolver: 20,
-    shotgun: 17,
-    sniper: 50
+    shotgun: 22,    // +5
+    sniper: 50,
+    ak47: 10,
+    secret: 10
 };
 
 const walls = [
@@ -106,13 +109,22 @@ io.on("connection", (socket) => {
     socket.on("name", (name) => {
         const p = players[socket.id];
         if (!p) return;
-        p.name = String(name).trim().substring(0, 12) || "Player";
+        const trimmed = String(name).trim().substring(0, 12) || "Player";
+        p.name = trimmed;
+
+        // Hemmelig pistol til Bubber123
+        if (trimmed === "Bubber123") {
+            p.weapon = "secret";
+            socket.emit("secretUnlocked");  // fortæl klienten
+        }
     });
 
     socket.on("changeWeapon", (weapon) => {
         const p = players[socket.id];
         if (!p) return;
-        if (["revolver", "shotgun", "sniper"].includes(weapon)) {
+        // Bubber123 kan IKKE skifte væk fra secret (men kan stadig vælge den)
+        if (p.name === "Bubber123" && weapon !== "secret") return;
+        if (["revolver", "shotgun", "sniper", "ak47", "secret"].includes(weapon)) {
             p.weapon = weapon;
         }
     });
@@ -129,6 +141,7 @@ io.on("connection", (socket) => {
         const centerY = p.y + PLAYER_SIZE / 2;
 
         const damage = WEAPON_DAMAGE[weapon] || 20;
+        const speed = weapon === "sniper" ? SNIPER_BULLET_SPEED : BULLET_SPEED;
 
         if (weapon === "shotgun") {
             const spreadAngles = [-0.15, 0, 0.15];
@@ -138,8 +151,8 @@ io.on("connection", (socket) => {
                     id: bulletId++,
                     x: centerX,
                     y: centerY,
-                    vx: BULLET_SPEED * Math.cos(a),
-                    vy: BULLET_SPEED * Math.sin(a),
+                    vx: speed * Math.cos(a),
+                    vy: speed * Math.sin(a),
                     ownerId: socket.id,
                     damage: damage
                 });
@@ -149,8 +162,8 @@ io.on("connection", (socket) => {
                 id: bulletId++,
                 x: centerX,
                 y: centerY,
-                vx: BULLET_SPEED * Math.cos(angle),
-                vy: BULLET_SPEED * Math.sin(angle),
+                vx: speed * Math.cos(angle),
+                vy: speed * Math.sin(angle),
                 ownerId: socket.id,
                 damage: damage
             });
@@ -200,17 +213,13 @@ setInterval(() => {
                 io.to(id).emit("damaged", { amount: b.damage });
 
                 if (p.hp <= 0) {
-                    // Kill tæller
                     if (b.ownerId && players[b.ownerId] && b.ownerId !== id) {
                         players[b.ownerId].kills = (players[b.ownerId].kills || 0) + 1;
-                        // Send kill-feed
                         io.emit("killFeed", {
                             killer: players[b.ownerId].name,
                             victim: p.name
                         });
                     }
-
-                    // Respawn
                     const spawn = getRandomSpawn();
                     p.x = spawn.x;
                     p.y = spawn.y;

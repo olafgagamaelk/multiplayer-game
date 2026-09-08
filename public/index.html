@@ -166,7 +166,8 @@ let bullets = [];
 
 const MAP_WIDTH = 1400;
 const MAP_HEIGHT = 900;
-const PLAYER_SIZE = 30;
+const PLAYER_SIZE = 30;           // hitbox / kollision
+const VISUAL_PLAYER_SIZE = 38;    // visuel størrelse (lidt større)
 const SPEED = 2.6;
 
 const walls = [
@@ -221,7 +222,7 @@ const images = {
     bullet: new Image()
 };
 
-images.grass.src = "https://i.postimg.cc/x13tWgvj/grass.avif";
+images.grass.src = "https://i.postimg.cc/PrPHfp3j/grass2.avif";  // NY græs tekstur
 images.wall.src = "https://i.postimg.cc/8zmtqwRp/wall.jpg";
 images.bush.src = "https://i.postimg.cc/DwPBt5r2/bush.png";
 images.stone.src = "https://i.postimg.cc/K8DJdQPm/stone.png";
@@ -244,42 +245,52 @@ const keys = {};
 let lastSend = 0;
 let lastShoot = 0;
 
-// Våbensystem
+// Våbensystem – med billede og størrelses-faktor
 const weapons = {
     revolver: {
         name: "Revolver",
         magSize: 6,
         reloadTime: 1500,
         shootCooldown: 200,
-        image: images.revolver
+        image: images.revolver,
+        width: 38,
+        height: 20
     },
     shotgun: {
         name: "Shotgun",
         magSize: 2,
         reloadTime: 2000,
         shootCooldown: 800,
-        image: images.shotgun
+        image: images.shotgun,
+        width: 42,
+        height: 24
     },
     sniper: {
         name: "Sniper",
         magSize: 1,
         reloadTime: 1800,
         shootCooldown: 900,
-        image: images.sniper
+        image: images.sniper,
+        width: 50,          // lidt større end andre
+        height: 26
     },
     ak47: {
         name: "AK-47",
         magSize: 10,
         reloadTime: 2200,
         shootCooldown: 120,
-        image: images.ak47
+        image: images.ak47,
+        width: 40,
+        height: 22
     },
     secret: {
         name: "Hemmelig Pistol",
         magSize: Infinity,
         reloadTime: 0,
         shootCooldown: 0,
-        image: images.secretgun
+        image: images.secretgun,
+        width: 35,
+        height: 18
     }
 };
 
@@ -290,6 +301,9 @@ let reloadStart = 0;
 let isBubber = false;
 
 let particles = [];
+
+// Cache til græs-mønster for bedre performance
+let grassPattern = null;
 
 // ---------- hjælpefunktioner ----------
 function lerp(a,b,t){ return a + (b-a)*t; }
@@ -626,9 +640,11 @@ function update(){
 
 // ---------- TEGNING MED BILLEDER ----------
 function drawGrass(){
-    if (images.grass.complete && images.grass.naturalWidth > 0) {
-        const pattern = ctx.createPattern(images.grass, "repeat");
-        ctx.fillStyle = pattern;
+    if (!grassPattern && images.grass.complete && images.grass.naturalWidth > 0) {
+        grassPattern = ctx.createPattern(images.grass, "repeat");
+    }
+    if (grassPattern) {
+        ctx.fillStyle = grassPattern;
         ctx.fillRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
     } else {
         ctx.fillStyle = "#5a9e4b";
@@ -689,10 +705,11 @@ function drawHealthBar(p, screenX, screenY) {
     ctx.strokeRect(x, y, w, h);
 }
 
+// Skygge tilpasset visuel størrelse
 function drawPlayerShadow(sx, sy){
     ctx.fillStyle = "rgba(0,0,0,0.4)";
     ctx.beginPath();
-    ctx.ellipse(sx+PLAYER_SIZE/2, sy+PLAYER_SIZE+2, PLAYER_SIZE/2, PLAYER_SIZE/4, 0, 0, Math.PI*2);
+    ctx.ellipse(sx + VISUAL_PLAYER_SIZE/2, sy + VISUAL_PLAYER_SIZE + 2, VISUAL_PLAYER_SIZE/2, VISUAL_PLAYER_SIZE/4, 0, 0, Math.PI*2);
     ctx.fill();
 }
 
@@ -710,10 +727,10 @@ function drawWeapon(weapon, cx, cy, angle){
         ctx.rotate(angle);
     }
     
-    // Tilpas størrelse – våbenbilledet skal fylde ca. 30x16
-    const weaponWidth = 30;
-    const weaponHeight = 16;
-    ctx.drawImage(w.image, 0, -weaponHeight/2, weaponWidth, weaponHeight);
+    // Centrer våbenet omkring spilleren, så kuglen ser ud til at komme fra midten
+    const weaponWidth = w.width;
+    const weaponHeight = w.height;
+    ctx.drawImage(w.image, -weaponWidth/2, -weaponHeight/2, weaponWidth, weaponHeight);
     
     ctx.restore();
 }
@@ -737,7 +754,7 @@ function draw(){
     ctx.lineWidth = 4;
     ctx.strokeRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
 
-    // Kugler
+    // Kugler (billede)
     for(const bullet of bullets){
         if (images.bullet.complete && images.bullet.naturalWidth > 0) {
             const bulletSize = 10;
@@ -775,7 +792,10 @@ function draw(){
         drawPlayerShadow(sx, sy);
         
         if (images.enemy.complete && images.enemy.naturalWidth > 0) {
-            ctx.drawImage(images.enemy, sx - 2, sy - 2, PLAYER_SIZE + 4, PLAYER_SIZE + 4);
+            // Centrer billedet i forhold til hitbox
+            const offsetX = (VISUAL_PLAYER_SIZE - PLAYER_SIZE) / 2;
+            const offsetY = (VISUAL_PLAYER_SIZE - PLAYER_SIZE) / 2;
+            ctx.drawImage(images.enemy, sx - offsetX, sy - offsetY, VISUAL_PLAYER_SIZE, VISUAL_PLAYER_SIZE);
         } else {
             ctx.fillStyle = "#4a7ebb";
             ctx.fillRect(sx, sy, PLAYER_SIZE, PLAYER_SIZE);
@@ -789,7 +809,7 @@ function draw(){
         
         ctx.fillStyle = "#fff";
         ctx.textAlign = "center";
-        ctx.fillText(p.name || "Player", sx + 15, sy - 22);
+        ctx.fillText(p.name || "Player", sx + PLAYER_SIZE/2, sy - 22);
         drawHealthBar(p, sx, sy);
     }
 
@@ -799,7 +819,9 @@ function draw(){
     drawPlayerShadow(myScreenX, myScreenY);
     
     if (images.player.complete && images.player.naturalWidth > 0) {
-        ctx.drawImage(images.player, myScreenX - 2, myScreenY - 2, PLAYER_SIZE + 4, PLAYER_SIZE + 4);
+        const offsetX = (VISUAL_PLAYER_SIZE - PLAYER_SIZE) / 2;
+        const offsetY = (VISUAL_PLAYER_SIZE - PLAYER_SIZE) / 2;
+        ctx.drawImage(images.player, myScreenX - offsetX, myScreenY - offsetY, VISUAL_PLAYER_SIZE, VISUAL_PLAYER_SIZE);
     } else {
         ctx.fillStyle = "#d22";
         ctx.fillRect(myScreenX, myScreenY, PLAYER_SIZE, PLAYER_SIZE);
@@ -817,7 +839,7 @@ function draw(){
     if(players[myId]){
         ctx.fillStyle = "#fff";
         ctx.textAlign = "center";
-        ctx.fillText(players[myId].name || "Player", myScreenX + 15, myScreenY - 22);
+        ctx.fillText(players[myId].name || "Player", myScreenX + PLAYER_SIZE/2, myScreenY - 22);
         drawHealthBar(players[myId], myScreenX, myScreenY);
     }
     

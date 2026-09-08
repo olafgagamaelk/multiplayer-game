@@ -205,6 +205,36 @@ const decorations = [
     {x:20,y:700,type:"rock",size:8},
 ];
 
+// Billeder (loader fra Google Drev direkte links)
+const images = {
+    grass: new Image(),
+    wall: new Image(),
+    bush: new Image(),
+    stone: new Image(),
+    player: new Image(),
+    enemy: new Image(),
+    revolver: new Image(),
+    shotgun: new Image(),
+    sniper: new Image(),
+    ak47: new Image(),
+    secretgun: new Image(),
+    bullet: new Image()
+};
+
+// Google Drev direkte links (konverteret fra delingslinks)
+images.grass.src = "https://drive.google.com/uc?export=download&id=1gYyFrwhfDcVh_26SRVAFENMJWPmIPswN";
+images.wall.src = "https://drive.google.com/uc?export=download&id=11CfgzRLZDxOoK3MM1fzbFWGT2JL6rm8F";
+images.bush.src = "https://drive.google.com/uc?export=download&id=1vXaxuPMPqS7EQ_R7OpbLVTHANCaP3PX8";
+images.stone.src = "https://drive.google.com/uc?export=download&id=1FjGFzcxKQPlaXwcH7LG7JiSaUuT8j3tG";
+images.player.src = "https://drive.google.com/uc?export=download&id=1ugmc_lzpIih9jeypJRQdX7eSTurv103Q";
+images.enemy.src = "https://drive.google.com/uc?export=download&id=1bDPBVSf472z2Eo0yPhBzLAWRn0hjObnI";
+images.revolver.src = "https://drive.google.com/uc?export=download&id=1WXl7vk-T5FsmCMVNN-qoAE_2Yb5RwvIW";
+images.shotgun.src = "https://drive.google.com/uc?export=download&id=1iIzCpX2tsfTLvf_EJ2MDj-fp27wyJUhd";
+images.sniper.src = "https://drive.google.com/uc?export=download&id=15ffib_CpEnAJcJWvpaX8Uuw_4Tq2qm8c";
+images.ak47.src = "https://drive.google.com/uc?export=download&id=1KyfOREt_dJQR8DHmE3l-7zIPYkITXfhZ";
+images.secretgun.src = "https://drive.google.com/uc?export=download&id=1TckBzrKvXFyodh9iaSFAyapo8MQcjpBK";
+images.bullet.src = "https://drive.google.com/uc?export=download&id=1umKTzXb-dFpigOj0WnteWwYxFZz7DEgx";
+
 const me = { x:700, y:450 };
 
 let camX = 0, camY = 0;
@@ -221,31 +251,36 @@ const weapons = {
         name: "Revolver",
         magSize: 6,
         reloadTime: 1500,
-        shootCooldown: 200
+        shootCooldown: 200,
+        image: images.revolver
     },
     shotgun: {
         name: "Shotgun",
         magSize: 2,
         reloadTime: 2000,
-        shootCooldown: 800
+        shootCooldown: 800,
+        image: images.shotgun
     },
     sniper: {
         name: "Sniper",
         magSize: 1,
         reloadTime: 1800,
-        shootCooldown: 900
+        shootCooldown: 900,
+        image: images.sniper
     },
     ak47: {
         name: "AK-47",
         magSize: 10,
         reloadTime: 2200,
-        shootCooldown: 120
+        shootCooldown: 120,
+        image: images.ak47
     },
     secret: {
         name: "Hemmelig Pistol",
         magSize: Infinity,
         reloadTime: 0,
-        shootCooldown: 0
+        shootCooldown: 0,
+        image: images.secretgun
     }
 };
 
@@ -253,7 +288,7 @@ let currentWeapon = "revolver";
 let magazine = weapons.revolver.magSize;
 let isReloading = false;
 let reloadStart = 0;
-let isBubber = false;   // om man har det hemmelige våben
+let isBubber = false;
 
 let particles = [];
 
@@ -270,7 +305,7 @@ window.addEventListener("resize", resize);
 // Våbenskift UI
 weaponBtns.forEach(btn => {
     btn.addEventListener("click", () => {
-        if (isBubber) return;   // Bubber123 kan ikke skifte
+        if (isBubber) return;
         if (isReloading) return;
         const weapon = btn.dataset.weapon;
         if (weapon === currentWeapon) return;
@@ -303,10 +338,7 @@ socket.on("secretUnlocked", () => {
     currentWeapon = "secret";
     magazine = Infinity;
     updateAmmoDisplay();
-    // Skjul våbenmenu
     weaponBtns.forEach(b => b.style.display = "none");
-    // Marker hemmelig pistol som aktiv
-    document.querySelectorAll(".weaponBtn").forEach(b => b.classList.remove("active"));
 });
 
 socket.on("state", data => {
@@ -473,22 +505,6 @@ canvas.addEventListener("mousedown", e => {
     me.x = Math.max(0, Math.min(MAP_WIDTH - PLAYER_SIZE, me.x));
     me.y = Math.max(0, Math.min(MAP_HEIGHT - PLAYER_SIZE, me.y));
 
-    const muzzleX = centerX + Math.cos(angle)*14;
-    const muzzleY = centerY + Math.sin(angle)*14;
-    const particleCount = currentWeapon === "shotgun" ? 10 : 6;
-    for(let i=0;i<particleCount;i++){
-        const spread = (Math.random()-0.5)*0.6;
-        particles.push({
-            x: muzzleX, y: muzzleY,
-            vx: Math.cos(angle+spread)*4,
-            vy: Math.sin(angle+spread)*4,
-            life: 6,
-            maxLife: 6,
-            color: "orange",
-            size: 3+Math.random()*4
-        });
-    }
-
     if(magazine <= 0 && w.magSize !== Infinity && !isReloading){
         startReload();
     }
@@ -609,51 +625,31 @@ function update(){
     }
 }
 
-// ---------- TEGNING (våbenmodeller som før, fungerer perfekt) ----------
+// ---------- TEGNING MED BILLEDER ----------
 function drawGrass(){
-    ctx.fillStyle = "#5a9e4b";
-    ctx.fillRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
-    ctx.fillStyle = "#4f8e42";
-    for(let y=-camY; y<MAP_HEIGHT-camY; y+=16){
-        ctx.fillRect(-camX, y, MAP_WIDTH, 2);
+    if (images.grass.complete && images.grass.naturalWidth > 0) {
+        const pattern = ctx.createPattern(images.grass, "repeat");
+        ctx.fillStyle = pattern;
+        ctx.fillRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
+    } else {
+        // Fallback
+        ctx.fillStyle = "#5a9e4b";
+        ctx.fillRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
     }
-    ctx.strokeStyle = "#3d7030";
-    ctx.lineWidth = 1;
-    for(let x=-camX; x<MAP_WIDTH-camX; x+=18){
-        for(let y=-camY; y<MAP_HEIGHT-camY; y+=22){
-            ctx.beginPath();
-            ctx.moveTo(x, y+2);
-            ctx.lineTo(x+1, y-2);
-            ctx.stroke();
-        }
-    }
-}
-
-function drawWallShadow(wall){
-    ctx.save();
-    ctx.translate(wall.x + wall.w/2 - camX + 4, wall.y + wall.h/2 - camY + 4);
-    ctx.rotate(wall.r * Math.PI / 180);
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.fillRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
-    ctx.restore();
 }
 
 function drawWall(wall){
     ctx.save();
     ctx.translate(wall.x + wall.w/2 - camX, wall.y + wall.h/2 - camY);
     ctx.rotate(wall.r * Math.PI / 180);
-    ctx.fillStyle = "#8a8a8a";
-    ctx.fillRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
-    ctx.fillStyle = "#6e6e6e";
-    const brickW = 16, brickH = 10;
-    const seed = wall.x * 31 + wall.y * 17;
-    for(let bx = -wall.w/2; bx < wall.w/2; bx += brickW + 3){
-        for(let by = -wall.h/2; by < wall.h/2; by += brickH + 2){
-            const w = brickW * (0.6 + ((bx*7 + by*13 + seed) % 10) / 25);
-            const h = brickH * (0.6 + ((bx*3 + by*11 + seed) % 10) / 25);
-            ctx.fillRect(bx, by, w, h);
-        }
+    
+    if (images.wall.complete && images.wall.naturalWidth > 0) {
+        ctx.drawImage(images.wall, -wall.w/2, -wall.h/2, wall.w, wall.h);
+    } else {
+        ctx.fillStyle = "#8a8a8a";
+        ctx.fillRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
     }
+    
     ctx.strokeStyle = "#505050";
     ctx.lineWidth = 2;
     ctx.strokeRect(-wall.w/2, -wall.h/2, wall.w, wall.h);
@@ -664,35 +660,17 @@ function drawDecorations(){
     for(const d of decorations){
         const sx = d.x - camX;
         const sy = d.y - camY;
-        ctx.fillStyle = "rgba(0,0,0,0.3)";
-        ctx.beginPath();
-        if(d.type === "bush"){
-            ctx.arc(sx+2, sy+3, d.size, 0, Math.PI*2);
+        const img = d.type === "bush" ? images.bush : images.stone;
+        const size = d.size * 2.5;
+        
+        if (img.complete && img.naturalWidth > 0) {
+            ctx.drawImage(img, sx - size/2, sy - size/2, size, size);
         } else {
-            ctx.fillRect(sx-d.size/2+2, sy-d.size/2+3, d.size, d.size);
-        }
-        ctx.fill();
-        if(d.type === "bush"){
-            ctx.fillStyle = "#3b5e1f";
+            // Fallback
+            ctx.fillStyle = d.type === "bush" ? "#3b5e1f" : "#6b6b6b";
             ctx.beginPath();
             ctx.arc(sx, sy, d.size, 0, Math.PI*2);
             ctx.fill();
-            ctx.fillStyle = "#4b7029";
-            const seed = d.x * 37 + d.y * 13;
-            for(let i=0;i<5;i++){
-                const angle = ((seed + i*71) % 360) * Math.PI/180;
-                const dist = ((seed + i*47) % 100) / 100 * d.size * 0.7;
-                const ax = sx + Math.cos(angle)*dist;
-                const ay = sy + Math.sin(angle)*dist;
-                ctx.beginPath();
-                ctx.arc(ax, ay, d.size/5, 0, Math.PI*2);
-                ctx.fill();
-            }
-        } else {
-            ctx.fillStyle = "#6b6b6b";
-            ctx.fillRect(sx-d.size/2, sy-d.size/2, d.size, d.size);
-            ctx.fillStyle = "#545454";
-            ctx.fillRect(sx-d.size/2+2, sy-d.size/2+2, d.size-4, d.size-4);
         }
     }
 }
@@ -721,70 +699,25 @@ function drawPlayerShadow(sx, sy){
     ctx.fill();
 }
 
-function drawRevolverModel(){
-    ctx.fillStyle = "#3a3a3a"; ctx.fillRect(6, -2, 16, 4);
-    ctx.fillStyle = "#555"; ctx.fillRect(20, -1.5, 3, 3);
-    ctx.fillStyle = "#2a2a2a"; ctx.beginPath(); ctx.ellipse(2, 0, 7, 5, 0, 0, Math.PI*2); ctx.fill();
-    for(let i=0;i<6;i++){
-        const a = i * Math.PI/3;
-        ctx.fillStyle = "#444"; ctx.beginPath();
-        ctx.arc(2 + Math.cos(a)*4.5, Math.sin(a)*3.2, 1.2, 0, Math.PI*2);
-        ctx.fill();
-    }
-    ctx.fillStyle = "#5c3d2e"; ctx.beginPath(); ctx.moveTo(-4,2); ctx.lineTo(-10,14); ctx.lineTo(-6,16); ctx.lineTo(-1,5); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "#333"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0,2); ctx.lineTo(4,10); ctx.lineTo(2,10); ctx.stroke();
-}
-
-function drawShotgunModel(){
-    ctx.fillStyle = "#444"; ctx.fillRect(6, -3, 20, 2.5); ctx.fillRect(6, 0.5, 20, 2.5);
-    ctx.fillStyle = "#5a4320"; ctx.beginPath(); ctx.moveTo(-2,2); ctx.lineTo(-12,12); ctx.lineTo(-8,14); ctx.lineTo(0,5); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#5c3d2e"; ctx.beginPath(); ctx.moveTo(4,-4); ctx.lineTo(4,-14); ctx.lineTo(6,-14); ctx.lineTo(6,-4); ctx.closePath(); ctx.fill();
-}
-
-function drawSniperModel(){
-    ctx.fillStyle = "#2b2b2b"; ctx.fillRect(6, -2, 24, 4);
-    ctx.fillStyle = "#555"; ctx.fillRect(26, -1.5, 4, 3);
-    ctx.fillStyle = "#1a1a1a"; ctx.fillRect(10, -6, 14, 3);
-    ctx.fillStyle = "#4a3320"; ctx.beginPath(); ctx.moveTo(-4,2); ctx.lineTo(-16,14); ctx.lineTo(-12,16); ctx.lineTo(-2,5); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "#222"; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(-8,10); ctx.lineTo(-10,20); ctx.moveTo(-4,11); ctx.lineTo(-6,20); ctx.stroke();
-}
-
-function drawAKModel(){
-    // AK-47 model
-    ctx.fillStyle = "#3a3a3a"; ctx.fillRect(6, -2, 18, 4);
-    ctx.fillStyle = "#555"; ctx.fillRect(22, -1.5, 3, 3);
-    // Magasin
-    ctx.fillStyle = "#2a2a2a"; ctx.fillRect(4, 2, 8, 10);
-    // Kolbe
-    ctx.fillStyle = "#5a3d2a"; ctx.beginPath(); ctx.moveTo(-4,2); ctx.lineTo(-14,10); ctx.lineTo(-10,12); ctx.lineTo(-2,4); ctx.closePath(); ctx.fill();
-    // Sigte
-    ctx.fillStyle = "#1a1a1a"; ctx.fillRect(12, -5, 6, 2);
-}
-
-function drawSecretModel(){
-    // Hemmelig pistol (lille, sølv)
-    ctx.fillStyle = "#c0c0c0"; ctx.fillRect(6, -1.5, 12, 3);
-    ctx.fillStyle = "#888"; ctx.fillRect(16, -1, 3, 2);
-    ctx.fillStyle = "#4a4a4a"; ctx.beginPath(); ctx.moveTo(-3,1.5); ctx.lineTo(-8,12); ctx.lineTo(-5,13); ctx.lineTo(0,3); ctx.closePath(); ctx.fill();
-}
-
 function drawWeapon(weapon, cx, cy, angle){
+    const w = weapons[weapon];
+    if (!w || !w.image || !w.image.complete || w.image.naturalWidth === 0) return;
+    
     ctx.save();
     ctx.translate(cx, cy);
+    
     if (Math.cos(angle) < 0) {
         ctx.scale(-1, 1);
         ctx.rotate(Math.PI - angle);
     } else {
         ctx.rotate(angle);
     }
-    switch(weapon){
-        case "revolver": drawRevolverModel(); break;
-        case "shotgun": drawShotgunModel(); break;
-        case "sniper": drawSniperModel(); break;
-        case "ak47": drawAKModel(); break;
-        case "secret": drawSecretModel(); break;
-    }
+    
+    // Tegn våbenbilledet (tilpasset størrelse)
+    const weaponWidth = 30;
+    const weaponHeight = 16;
+    ctx.drawImage(w.image, 0, -weaponHeight/2, weaponWidth, weaponHeight);
+    
     ctx.restore();
 }
 
@@ -800,24 +733,27 @@ function draw(){
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawGrass();
     drawDecorations();
-    for(const wall of walls) drawWallShadow(wall);
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 4;
-    ctx.strokeRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
+    
     for(const wall of walls) drawWall(wall);
+    
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
 
+    // Kugler
     for(const bullet of bullets){
-        ctx.fillStyle = "rgba(0,0,0,0.4)";
-        ctx.beginPath();
-        ctx.arc(bullet.x - camX + 2, bullet.y - camY + 2, 5, 0, Math.PI*2);
-        ctx.fill();
-        ctx.shadowColor = "orange"; ctx.shadowBlur = 10;
-        ctx.fillStyle = "#ffd700";
-        ctx.beginPath();
-        ctx.arc(bullet.x - camX, bullet.y - camY, 4, 0, Math.PI*2);
-        ctx.fill();
-        ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
+        if (images.bullet.complete && images.bullet.naturalWidth > 0) {
+            const bulletSize = 10;
+            ctx.drawImage(images.bullet, bullet.x - camX - bulletSize/2, bullet.y - camY - bulletSize/2, bulletSize, bulletSize);
+        } else {
+            ctx.fillStyle = "#ffd700";
+            ctx.beginPath();
+            ctx.arc(bullet.x - camX, bullet.y - camY, 4, 0, Math.PI*2);
+            ctx.fill();
+        }
     }
 
+    // Partikler (bevarer canvas-effekter)
     for(const p of particles){
         const alpha = p.life / p.maxLife;
         ctx.globalAlpha = alpha;
@@ -828,6 +764,7 @@ function draw(){
         ctx.globalAlpha = 1;
     }
 
+    // Andre spillere
     for(const id in players){
         if(id === myId) continue;
         const p = players[id];
@@ -837,28 +774,40 @@ function draw(){
         rp.y = lerp(rp.y, p.y, 0.2);
         const sx = rp.x - camX;
         const sy = rp.y - camY;
+        
         drawPlayerShadow(sx, sy);
-        ctx.fillStyle = "#4a7ebb";
-        ctx.fillRect(sx, sy, PLAYER_SIZE, PLAYER_SIZE);
-        ctx.fillStyle = "rgba(0,0,0,0.25)";
-        ctx.fillRect(sx+2, sy+2, PLAYER_SIZE-4, PLAYER_SIZE-4);
+        
+        if (images.enemy.complete && images.enemy.naturalWidth > 0) {
+            ctx.drawImage(images.enemy, sx - 2, sy - 2, PLAYER_SIZE + 4, PLAYER_SIZE + 4);
+        } else {
+            ctx.fillStyle = "#4a7ebb";
+            ctx.fillRect(sx, sy, PLAYER_SIZE, PLAYER_SIZE);
+        }
+        
         if(typeof p.aimAngle === "number" && p.weapon){
             const cx = rp.x + PLAYER_SIZE/2;
             const cy = rp.y + PLAYER_SIZE/2;
             drawWeapon(p.weapon, cx - camX, cy - camY, p.aimAngle);
         }
-        ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+        
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
         ctx.fillText(p.name || "Player", sx + 15, sy - 22);
         drawHealthBar(p, sx, sy);
     }
 
+    // Mig selv
     const myScreenX = me.x - camX;
     const myScreenY = me.y - camY;
     drawPlayerShadow(myScreenX, myScreenY);
-    ctx.fillStyle = "#d22";
-    ctx.fillRect(myScreenX, myScreenY, PLAYER_SIZE, PLAYER_SIZE);
-    ctx.fillStyle = "rgba(0,0,0,0.3)";
-    ctx.fillRect(myScreenX+2, myScreenY+2, PLAYER_SIZE-4, PLAYER_SIZE-4);
+    
+    if (images.player.complete && images.player.naturalWidth > 0) {
+        ctx.drawImage(images.player, myScreenX - 2, myScreenY - 2, PLAYER_SIZE + 4, PLAYER_SIZE + 4);
+    } else {
+        ctx.fillStyle = "#d22";
+        ctx.fillRect(myScreenX, myScreenY, PLAYER_SIZE, PLAYER_SIZE);
+    }
+    
     if(keys._mouseX && keys._mouseY){
         const worldMX = keys._mouseX + camX;
         const worldMY = keys._mouseY + camY;
@@ -867,11 +816,14 @@ function draw(){
         const aimAngle = Math.atan2(worldMY - centerY, worldMX - centerX);
         drawWeapon(currentWeapon, centerX - camX, centerY - camY, aimAngle);
     }
+    
     if(players[myId]){
-        ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
         ctx.fillText(players[myId].name || "Player", myScreenX + 15, myScreenY - 22);
         drawHealthBar(players[myId], myScreenX, myScreenY);
     }
+    
     drawVignette();
 }
 

@@ -205,7 +205,7 @@ const decorations = [
     {x:20,y:700,type:"rock",size:8},
 ];
 
-// Billeder (loader fra Google Drev direkte links)
+// Billeder – dine uploadede filer
 const images = {
     grass: new Image(),
     wall: new Image(),
@@ -221,19 +221,18 @@ const images = {
     bullet: new Image()
 };
 
-// Google Drev direkte links (konverteret fra delingslinks)
-images.grass.src = "https://drive.google.com/uc?export=download&id=1gYyFrwhfDcVh_26SRVAFENMJWPmIPswN";
-images.wall.src = "https://drive.google.com/uc?export=download&id=11CfgzRLZDxOoK3MM1fzbFWGT2JL6rm8F";
-images.bush.src = "https://drive.google.com/uc?export=download&id=1vXaxuPMPqS7EQ_R7OpbLVTHANCaP3PX8";
-images.stone.src = "https://drive.google.com/uc?export=download&id=1FjGFzcxKQPlaXwcH7LG7JiSaUuT8j3tG";
-images.player.src = "https://drive.google.com/uc?export=download&id=1ugmc_lzpIih9jeypJRQdX7eSTurv103Q";
-images.enemy.src = "https://drive.google.com/uc?export=download&id=1bDPBVSf472z2Eo0yPhBzLAWRn0hjObnI";
-images.revolver.src = "https://drive.google.com/uc?export=download&id=1WXl7vk-T5FsmCMVNN-qoAE_2Yb5RwvIW";
-images.shotgun.src = "https://drive.google.com/uc?export=download&id=1iIzCpX2tsfTLvf_EJ2MDj-fp27wyJUhd";
-images.sniper.src = "https://drive.google.com/uc?export=download&id=15ffib_CpEnAJcJWvpaX8Uuw_4Tq2qm8c";
-images.ak47.src = "https://drive.google.com/uc?export=download&id=1KyfOREt_dJQR8DHmE3l-7zIPYkITXfhZ";
-images.secretgun.src = "https://drive.google.com/uc?export=download&id=1TckBzrKvXFyodh9iaSFAyapo8MQcjpBK";
-images.bullet.src = "https://drive.google.com/uc?export=download&id=1umKTzXb-dFpigOj0WnteWwYxFZz7DEgx";
+images.grass.src = "https://i.postimg.cc/x13tWgvj/grass.avif";
+images.wall.src = "https://i.postimg.cc/8zmtqwRp/wall.jpg";
+images.bush.src = "https://i.postimg.cc/DwPBt5r2/bush.png";
+images.stone.src = "https://i.postimg.cc/K8DJdQPm/stone.png";
+images.player.src = "https://i.postimg.cc/t4N2LD3G/player.png";
+images.enemy.src = "https://i.postimg.cc/52SnZpBJ/enemy.png";
+images.revolver.src = "https://i.postimg.cc/RZBgs2H0/revolver.png";
+images.shotgun.src = "https://i.postimg.cc/6pfYDzrN/shotgun.png";
+images.sniper.src = "https://i.postimg.cc/vZt3pXrF/sniper.webp";
+images.ak47.src = "https://i.postimg.cc/pLJqgkfH/ak47.png";
+images.secretgun.src = "https://i.postimg.cc/4xgWLj9x/secretgun.jpg";
+images.bullet.src = "https://i.postimg.cc/pLHsG3FV/bullet.png";
 
 const me = { x:700, y:450 };
 
@@ -632,7 +631,6 @@ function drawGrass(){
         ctx.fillStyle = pattern;
         ctx.fillRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
     } else {
-        // Fallback
         ctx.fillStyle = "#5a9e4b";
         ctx.fillRect(-camX, -camY, MAP_WIDTH, MAP_HEIGHT);
     }
@@ -666,7 +664,6 @@ function drawDecorations(){
         if (img.complete && img.naturalWidth > 0) {
             ctx.drawImage(img, sx - size/2, sy - size/2, size, size);
         } else {
-            // Fallback
             ctx.fillStyle = d.type === "bush" ? "#3b5e1f" : "#6b6b6b";
             ctx.beginPath();
             ctx.arc(sx, sy, d.size, 0, Math.PI*2);
@@ -713,7 +710,7 @@ function drawWeapon(weapon, cx, cy, angle){
         ctx.rotate(angle);
     }
     
-    // Tegn våbenbilledet (tilpasset størrelse)
+    // Tilpas størrelse – våbenbilledet skal fylde ca. 30x16
     const weaponWidth = 30;
     const weaponHeight = 16;
     ctx.drawImage(w.image, 0, -weaponHeight/2, weaponWidth, weaponHeight);
@@ -753,7 +750,7 @@ function draw(){
         }
     }
 
-    // Partikler (bevarer canvas-effekter)
+    // Partikler (canvas-effekter)
     for(const p of particles){
         const alpha = p.life / p.maxLife;
         ctx.globalAlpha = alpha;
